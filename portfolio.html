@@ -1,0 +1,530 @@
+{% extends "base.html" %}
+{% block title %}Portfolio{% endblock %}
+{% block page_title %}Portfolio & Paper Trading{% endblock %}
+
+{% block content %}
+<div class="portfolio-page">
+    <!-- Portfolio Summary -->
+    <div class="portfolio-summary-grid" id="portfolioSummary">
+        <div class="loading-placeholder"><div class="spinner"></div><p>Loading portfolio...</p></div>
+    </div>
+
+    <div class="portfolio-content-grid">
+        <!-- Active Orders -->
+        <section class="card orders-card">
+            <div class="card-header">
+                <h2><i class="fas fa-clock"></i> Active Orders</h2>
+                <div class="card-actions">
+                    <button class="btn btn-sm btn-ghost" onclick="checkOrders()" title="Check if any orders should trigger">
+                        <i class="fas fa-sync-alt"></i> Check Now
+                    </button>
+                </div>
+            </div>
+            <div class="card-body" id="activeOrders">
+                <div class="loading-placeholder"><div class="spinner"></div></div>
+            </div>
+        </section>
+
+        <!-- Stock Holdings -->
+        <section class="card holdings-card">
+            <div class="card-header">
+                <h2><i class="fas fa-briefcase"></i> Stock Holdings</h2>
+            </div>
+            <div class="card-body" id="holdingsTable">
+                <div class="loading-placeholder"><div class="spinner"></div></div>
+            </div>
+        </section>
+
+        <!-- Options Positions -->
+        <section class="card">
+            <div class="card-header">
+                <h2><i class="fas fa-layer-group"></i> Options Positions</h2>
+            </div>
+            <div class="card-body" id="optionsHoldings">
+                <div class="loading-placeholder"><div class="spinner"></div></div>
+            </div>
+        </section>
+
+        <!-- Stock Trade History -->
+        <section class="card trades-history-card">
+            <div class="card-header">
+                <h2><i class="fas fa-history"></i> Stock Trade History</h2>
+            </div>
+            <div class="card-body" id="tradesHistory">
+                <div class="loading-placeholder"><div class="spinner"></div></div>
+            </div>
+        </section>
+
+        <!-- Options Trade History -->
+        <section class="card">
+            <div class="card-header">
+                <h2><i class="fas fa-history"></i> Options Trade History</h2>
+            </div>
+            <div class="card-body" id="optionsTradesHistory">
+                <div class="loading-placeholder"><div class="spinner"></div></div>
+            </div>
+        </section>
+
+        <!-- Order History (triggered/cancelled) -->
+        <section class="card">
+            <div class="card-header">
+                <h2><i class="fas fa-clipboard-list"></i> Order History</h2>
+            </div>
+            <div class="card-body" id="orderHistory">
+                <div class="loading-placeholder"><div class="spinner"></div></div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Account Actions -->
+    <section class="card">
+        <div class="card-header">
+            <h2><i class="fas fa-tools"></i> Account Management</h2>
+        </div>
+        <div class="card-body">
+            <div class="account-actions">
+                <div class="form-inline">
+                    <label>Reset account with balance:</label>
+                    <input type="number" id="resetBalance" value="100000" class="form-input" style="width: 160px;">
+                    <button class="btn btn-danger" onclick="resetAccount()"><i class="fas fa-redo"></i> Reset Account</button>
+                </div>
+                <p class="text-muted">This will clear all trades and positions and reset your cash balance.</p>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadPortfolio();
+    loadActiveOrders();
+    loadTradesHistory();
+    loadOptionsTradesHistory();
+    loadOrderHistory();
+});
+
+function loadPortfolio() {
+    fetch('/api/portfolio')
+        .then(r => r.json())
+        .then(data => {
+            renderPortfolioSummary(data);
+            renderHoldings(data.holdings);
+            renderOptionsHoldings(data.options_positions || []);
+        });
+}
+
+function renderPortfolioSummary(data) {
+    const retClass = data.total_return >= 0 ? 'positive' : 'negative';
+    document.getElementById('portfolioSummary').innerHTML = `
+        <div class="summary-card accent-primary">
+            <div class="summary-icon"><i class="fas fa-wallet"></i></div>
+            <div class="summary-info">
+                <span class="summary-label">Total Portfolio Value</span>
+                <span class="summary-value">$${formatNumber(data.total_portfolio_value)}</span>
+            </div>
+        </div>
+        <div class="summary-card accent-blue">
+            <div class="summary-icon"><i class="fas fa-money-bill-wave"></i></div>
+            <div class="summary-info">
+                <span class="summary-label">Cash Balance</span>
+                <span class="summary-value">$${formatNumber(data.cash_balance)}</span>
+            </div>
+        </div>
+        <div class="summary-card accent-purple">
+            <div class="summary-icon"><i class="fas fa-chart-pie"></i></div>
+            <div class="summary-info">
+                <span class="summary-label">Stock Holdings</span>
+                <span class="summary-value">$${formatNumber(data.holdings_value)}</span>
+            </div>
+        </div>
+        <div class="summary-card accent-orange">
+            <div class="summary-icon"><i class="fas fa-layer-group"></i></div>
+            <div class="summary-info">
+                <span class="summary-label">Options Value</span>
+                <span class="summary-value">$${formatNumber(data.options_value || 0)}</span>
+            </div>
+        </div>
+        <div class="summary-card ${data.total_return >= 0 ? 'accent-green' : 'accent-red'}">
+            <div class="summary-icon"><i class="fas fa-${data.total_return >= 0 ? 'arrow-up' : 'arrow-down'}"></i></div>
+            <div class="summary-info">
+                <span class="summary-label">Total Return</span>
+                <span class="summary-value ${retClass}">
+                    ${data.total_return >= 0 ? '+' : ''}$${formatNumber(data.total_return)}
+                    <small>(${data.total_return_percent >= 0 ? '+' : ''}${data.total_return_percent.toFixed(2)}%)</small>
+                </span>
+            </div>
+        </div>`;
+}
+
+function renderHoldings(holdings) {
+    const container = document.getElementById('holdingsTable');
+    if (!holdings.length) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-briefcase" style="font-size: 2rem; opacity: 0.3;"></i>
+                <p>No holdings yet</p>
+                <button class="btn btn-primary" onclick="openQuickTrade()">Make your first trade</button>
+            </div>`;
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="table-responsive">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Symbol</th>
+                        <th>Shares</th>
+                        <th>Avg Cost</th>
+                        <th>Current</th>
+                        <th>Market Value</th>
+                        <th>Gain/Loss</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${holdings.map(h => {
+                        const glClass = h.gain_loss >= 0 ? 'positive' : 'negative';
+                        return `
+                        <tr>
+                            <td>
+                                <a href="/stock/${h.ticker}" class="ticker-link">
+                                    <strong>${h.ticker}</strong>
+                                    <small>${h.name}</small>
+                                </a>
+                            </td>
+                            <td>${h.quantity}</td>
+                            <td>$${h.avg_cost.toFixed(2)}</td>
+                            <td>$${h.current_price.toFixed(2)}</td>
+                            <td>$${formatNumber(h.market_value)}</td>
+                            <td class="${glClass}">
+                                ${h.gain_loss >= 0 ? '+' : ''}$${formatNumber(h.gain_loss)}
+                                <small>(${h.gain_loss_percent >= 0 ? '+' : ''}${h.gain_loss_percent.toFixed(2)}%)</small>
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-ghost" onclick="openQuickTrade(); document.getElementById('tradeTicker').value='${h.ticker}'; document.getElementById('tradeAction').value='SELL';">
+                                    Sell
+                                </button>
+                            </td>
+                        </tr>`;
+                    }).join('')}
+                </tbody>
+            </table>
+        </div>`;
+}
+
+function loadTradesHistory() {
+    fetch('/api/trades?limit=50')
+        .then(r => r.json())
+        .then(data => {
+            const container = document.getElementById('tradesHistory');
+            if (!data.length) {
+                container.innerHTML = '<div class="empty-state"><p>No trades recorded</p></div>';
+                return;
+            }
+            container.innerHTML = `
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Action</th>
+                                <th>Symbol</th>
+                                <th>Qty</th>
+                                <th>Price</th>
+                                <th>Total</th>
+                                <th>Notes</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.map(t => `
+                                <tr>
+                                    <td>${formatDate(t.timestamp)}</td>
+                                    <td><span class="trade-badge ${t.action.toLowerCase()}">${t.action}</span></td>
+                                    <td><a href="/stock/${t.ticker}" class="ticker-link"><strong>${t.ticker}</strong></a></td>
+                                    <td>${t.quantity}</td>
+                                    <td>$${t.price.toFixed(2)}</td>
+                                    <td>$${formatNumber(t.total)}</td>
+                                    <td class="text-muted">${t.notes || '—'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>`;
+        });
+}
+
+function renderOptionsHoldings(positions) {
+    const container = document.getElementById('optionsHoldings');
+    if (!positions.length) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-layer-group" style="font-size: 2rem; opacity: 0.3;"></i>
+                <p>No options positions</p>
+                <p class="text-muted">Trade options from any stock's detail page</p>
+            </div>`;
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="table-responsive">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Contract</th>
+                        <th>Type</th>
+                        <th>Strike</th>
+                        <th>Expiration</th>
+                        <th>Contracts</th>
+                        <th>Avg Premium</th>
+                        <th>Current</th>
+                        <th>Market Value</th>
+                        <th>Gain/Loss</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${positions.map(p => {
+                        const glClass = p.gain_loss >= 0 ? 'positive' : 'negative';
+                        const typeClass = p.option_type === 'CALL' ? 'opt-badge-call' : 'opt-badge-put';
+                        return `
+                        <tr>
+                            <td><a href="/stock/${p.ticker}" class="ticker-link"><strong>${p.ticker}</strong></a></td>
+                            <td><span class="opt-type-badge ${typeClass}">${p.option_type}</span></td>
+                            <td>$${p.strike.toFixed(2)}</td>
+                            <td>${p.expiration}</td>
+                            <td>${p.contracts}</td>
+                            <td>$${p.avg_premium.toFixed(2)}</td>
+                            <td>$${p.current_premium.toFixed(2)}</td>
+                            <td>$${formatNumber(p.market_value)}</td>
+                            <td class="${glClass}">
+                                ${p.gain_loss >= 0 ? '+' : ''}$${formatNumber(p.gain_loss)}
+                                <small>(${p.gain_loss_percent >= 0 ? '+' : ''}${p.gain_loss_percent.toFixed(2)}%)</small>
+                            </td>
+                        </tr>`;
+                    }).join('')}
+                </tbody>
+            </table>
+        </div>`;
+}
+
+function loadOptionsTradesHistory() {
+    fetch('/api/options/trades?limit=50')
+        .then(r => r.json())
+        .then(data => {
+            const container = document.getElementById('optionsTradesHistory');
+            if (!data.length) {
+                container.innerHTML = '<div class="empty-state"><p>No options trades recorded</p></div>';
+                return;
+            }
+            container.innerHTML = `
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Action</th>
+                                <th>Symbol</th>
+                                <th>Type</th>
+                                <th>Strike</th>
+                                <th>Exp</th>
+                                <th>Contracts</th>
+                                <th>Premium</th>
+                                <th>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.map(t => {
+                                const typeClass = t.option_type === 'CALL' ? 'opt-badge-call' : 'opt-badge-put';
+                                return `
+                                <tr>
+                                    <td>${formatDate(t.timestamp)}</td>
+                                    <td><span class="trade-badge ${t.action.toLowerCase()}">${t.action}</span></td>
+                                    <td><a href="/stock/${t.ticker}" class="ticker-link"><strong>${t.ticker}</strong></a></td>
+                                    <td><span class="opt-type-badge ${typeClass}">${t.option_type}</span></td>
+                                    <td>$${t.strike.toFixed(2)}</td>
+                                    <td>${t.expiration}</td>
+                                    <td>${t.contracts}</td>
+                                    <td>$${t.premium.toFixed(2)}</td>
+                                    <td>$${formatNumber(t.total)}</td>
+                                </tr>`;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>`;
+        });
+}
+
+function loadActiveOrders() {
+    fetch('/api/orders')
+        .then(r => r.json())
+        .then(orders => {
+            const container = document.getElementById('activeOrders');
+            if (!orders.length) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-clock" style="font-size: 2rem; opacity: 0.3;"></i>
+                        <p>No active orders</p>
+                        <p class="text-muted">Set stop loss or take profit orders from Quick Trade</p>
+                    </div>`;
+                return;
+            }
+            container.innerHTML = `
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Symbol</th>
+                                <th>Type</th>
+                                <th>Action</th>
+                                <th>Qty</th>
+                                <th>Trigger</th>
+                                <th>Current</th>
+                                <th>Distance</th>
+                                <th>Created</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${orders.map(o => {
+                                const distClass = o.action === 'SELL'
+                                    ? (o.distance > 0 ? 'positive' : 'negative')
+                                    : (o.distance < 0 ? 'positive' : 'negative');
+                                const typeLabel = o.order_type.replace(/_/g, ' ');
+                                const trailInfo = o.order_type === 'TRAILING_STOP'
+                                    ? ` (${o.trail_percent}%)`
+                                    : '';
+                                return `
+                                <tr>
+                                    <td><a href="/stock/${o.ticker}" class="ticker-link"><strong>${o.ticker}</strong></a></td>
+                                    <td><span class="order-type-badge order-${o.order_type.toLowerCase()}">${typeLabel}${trailInfo}</span></td>
+                                    <td><span class="trade-badge ${o.action.toLowerCase()}">${o.action}</span></td>
+                                    <td>${o.quantity}</td>
+                                    <td>$${o.trigger_price ? o.trigger_price.toFixed(2) : '—'}</td>
+                                    <td>$${o.current_price.toFixed(2)}</td>
+                                    <td class="${distClass}">
+                                        $${Math.abs(o.distance).toFixed(2)} (${Math.abs(o.distance_percent).toFixed(1)}%)
+                                    </td>
+                                    <td>${formatDate(o.created_at)}</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-danger" onclick="cancelOrderBtn(${o.id})" title="Cancel order">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </td>
+                                </tr>`;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>`;
+        });
+}
+
+function loadOrderHistory() {
+    fetch('/api/orders/history?limit=30')
+        .then(r => r.json())
+        .then(orders => {
+            const container = document.getElementById('orderHistory');
+            if (!orders.length) {
+                container.innerHTML = '<div class="empty-state"><p>No completed orders yet</p></div>';
+                return;
+            }
+            container.innerHTML = `
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Symbol</th>
+                                <th>Type</th>
+                                <th>Action</th>
+                                <th>Qty</th>
+                                <th>Trigger</th>
+                                <th>Status</th>
+                                <th>Date</th>
+                                <th>Notes</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${orders.map(o => {
+                                const typeLabel = o.order_type.replace(/_/g, ' ');
+                                const statusClass = o.status === 'TRIGGERED' ? 'positive' : 'text-muted';
+                                const trailInfo = o.order_type === 'TRAILING_STOP' ? ` (${o.trail_percent}%)` : '';
+                                return `
+                                <tr>
+                                    <td><a href="/stock/${o.ticker}" class="ticker-link"><strong>${o.ticker}</strong></a></td>
+                                    <td><span class="order-type-badge order-${o.order_type.toLowerCase()}">${typeLabel}${trailInfo}</span></td>
+                                    <td><span class="trade-badge ${o.action.toLowerCase()}">${o.action}</span></td>
+                                    <td>${o.quantity}</td>
+                                    <td>$${o.trigger_price ? o.trigger_price.toFixed(2) : '—'}</td>
+                                    <td class="${statusClass}">${o.status}</td>
+                                    <td>${formatDate(o.triggered_at || o.created_at)}</td>
+                                    <td class="text-muted">${o.notes || '—'}</td>
+                                </tr>`;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>`;
+        });
+}
+
+function cancelOrderBtn(orderId) {
+    if (!confirm('Cancel this order?')) return;
+    fetch(`/api/orders/${orderId}/cancel`, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            showToast(data.message || data.error, data.success ? 'success' : 'error');
+            loadActiveOrders();
+            loadOrderHistory();
+        });
+}
+
+function checkOrders() {
+    const btn = event.target.closest('button');
+    const origHTML = btn.innerHTML;
+    btn.innerHTML = '<div class="spinner-sm"></div> Checking...';
+    btn.disabled = true;
+
+    fetch('/api/orders/check', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            btn.innerHTML = origHTML;
+            btn.disabled = false;
+            if (data.triggered && data.triggered.length > 0) {
+                data.triggered.forEach(t => {
+                    showToast(`${t.type.replace(/_/g,' ')} triggered: ${t.message}`, 'success');
+                });
+                loadActiveOrders();
+                loadOrderHistory();
+                loadPortfolio();
+                loadTradesHistory();
+            } else {
+                showToast(`Checked ${data.checked} orders — none triggered`, 'info');
+            }
+        })
+        .catch(() => {
+            btn.innerHTML = origHTML;
+            btn.disabled = false;
+        });
+}
+
+function resetAccount() {
+    if (!confirm('Are you sure? This will delete ALL trades and positions.')) return;
+    const balance = parseFloat(document.getElementById('resetBalance').value) || 100000;
+
+    fetch('/api/account/reset', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({balance})
+    })
+    .then(r => r.json())
+    .then(data => {
+        showToast(data.message, 'success');
+        loadPortfolio();
+        loadActiveOrders();
+        loadTradesHistory();
+        loadOptionsTradesHistory();
+        loadOrderHistory();
+    });
+}
+</script>
+{% endblock %}

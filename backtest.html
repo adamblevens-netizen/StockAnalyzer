@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+{% block title %}Backtester{% endblock %}
+{% block page_title %}Strategy Backtester{% endblock %}
+
+{% block content %}
+<div class="backtest-page">
+    <!-- Backtest Configuration -->
+    <section class="card">
+        <div class="card-header">
+            <h2><i class="fas fa-flask"></i> Configure Backtest</h2>
+        </div>
+        <div class="card-body">
+            <div class="backtest-form">
+                <div class="form-row form-row-4">
+                    <div class="form-group">
+                        <label>Ticker Symbol</label>
+                        <input type="text" id="btTicker" value="AAPL" class="form-input" style="text-transform: uppercase;" placeholder="e.g. AAPL">
+                    </div>
+                    <div class="form-group">
+                        <label>Strategy</label>
+                        <select id="btStrategy" class="form-input" onchange="updateStrategyParams()">
+                            {% for s in strategies %}
+                            <option value="{{ s.id }}">{{ s.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Start Date</label>
+                        <input type="date" id="btStartDate" class="form-input" value="2023-01-01">
+                    </div>
+                    <div class="form-group">
+                        <label>End Date</label>
+                        <input type="date" id="btEndDate" class="form-input">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Initial Capital ($)</label>
+                        <input type="number" id="btCapital" value="10000" class="form-input" min="100" step="100">
+                    </div>
+                    <div class="form-group strategy-params" id="strategyParams"></div>
+                </div>
+                <div class="strategy-description" id="strategyDescription"></div>
+                <button class="btn btn-primary btn-lg" onclick="runBacktest()" id="runBacktestBtn">
+                    <i class="fas fa-play"></i> Run Backtest
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Results -->
+    <div id="backtestResults" style="display: none;">
+        <!-- Summary Stats -->
+        <div class="backtest-summary-grid" id="btSummary"></div>
+
+        <!-- Equity Curve -->
+        <section class="card">
+            <div class="card-header">
+                <h2><i class="fas fa-chart-line"></i> Equity Curve</h2>
+            </div>
+            <div class="card-body">
+                <div id="equityChart" style="width: 100%; height: 400px;"></div>
+            </div>
+        </section>
+
+        <!-- Trade List -->
+        <section class="card">
+            <div class="card-header">
+                <h2><i class="fas fa-list"></i> Trade Log</h2>
+            </div>
+            <div class="card-body" id="btTradeLog"></div>
+        </section>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const STRATEGIES = {{ strategies | tojson }};
+
+document.addEventListener('DOMContentLoaded', function() {
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('btEndDate').value = today;
+    updateStrategyParams();
+});
+
+function updateStrategyParams() {
+    const strategyId = document.getElementById('btStrategy').value;
+    const strategy = STRATEGIES.find(s => s.id === strategyId);
+    const container = document.getElementById('strategyParams');
+    const descContainer = document.getElementById('strategyDescription');
+
+    descContainer.innerHTML = strategy ? `<p class="text-muted"><i class="fas fa-info-circle"></i> ${strategy.description}</p>` : '';
+
+    if (!strategy || !strategy.params.length) {
+        container.innerHTML = '';
+        return;
+    }
+
+    container.innerHTML = strategy.params.map(p => `
+        <div class="form-group" style="min-width: 140px;">
+            <label>${p.label}</label>
+            <input type="number" id="param_${p.name}" class="form-input" value="${p.default}"
+                   step="${p.type === 'float' ? '0.1' : '1'}">
+        </div>
+    `).join('');
+}
+
+function runBacktest() {
+    const btn = document.getElementById('runBacktestBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<div class="spinner-sm"></div> Running...';
+
+    const strategyId = document.getElementById('btStrategy').value;
+    const strategy = STRATEGIES.find(s => s.id === strategyId);
+
+    const payload = {
+        ticker: document.getElementById('btTicker').value.trim().toUpperCase(),
+        strategy: strategyId,
+        start_date: document.getElementById('btStartDate').value,
+        end_date: document.getElementById('btEndDate').value,
+        initial_capital: parseFloat(document.getElementById('btCapital').value) || 10000,
+    };
+
+    if (strategy && strategy.params) {
+        strategy.params.forEach(p => {
+            const el = document.getElementById(`param_${p.name}`);
+            if (el) payload[p.name] = parseFloat(el.value);
+        });
+    }
+
+    fetch('/api/backtest', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-play"></i> Run Backtest';
+
+        if (!data.success) {
+            showToast(data.error, 'error');
+            return;
+        }
+
+        document.getElementById('backtestResults').style.display = 'block';
+        renderBacktestSummary(data);
+        renderEquityCurve(data);
+        renderTradeLog(data);
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-play"></i> Run Backtest';
+        showToast('Backtest failed: ' + err.message, 'error');
+    });
+}
+
+function renderBacktestSummary(data) {
+    const retClass = data.total_return >= 0 ? 'positive' : 'negative';
+    document.getElementById('btSummary').innerHTML = `
+        <div class="summary-card ${data.total_return >= 0 ? 'accent-green' : 'accent-red'}">
+            <div class="summary-icon"><i class="fas fa-dollar-sign"></i></div>
+            <div class="summary-info">
+                <span class="summary-label">Final Value</span>
+                <span class="summary-value">$${formatNumber(data.final_value)}</span>
+            </div>
+        </div>
+        <div class="summary-card ${data.total_return >= 0 ? 'accent-green' : 'accent-red'}">
+            <div class="summary-icon"><i class="fas fa-percentage"></i></div>
+            <div class="summary-info">
+                <span class="summary-label">Total Return</span>
+                <span class="summary-value ${retClass}">${data.return_percent >= 0 ? '+' : ''}${data.return_percent.toFixed(2)}%</span>
+            </div>
+        </div>
+        <div class="summary-card accent-blue">
+            <div class="summary-icon"><i class="fas fa-exchange-alt"></i></div>
+            <div class="summary-info">
+                <span class="summary-label">Total Trades</span>
+                <span class="summary-value">${data.num_trades}</span>
+            </div>
+        </div>
+        <div class="summary-card accent-purple">
+            <div class="summary-icon"><i class="fas fa-trophy"></i></div>
+            <div class="summary-info">
+                <span class="summary-label">Win Rate</span>
+                <span class="summary-value">${data.win_rate}%</span>
+            </div>
+        </div>
+        <div class="summary-card accent-orange">
+            <div class="summary-icon"><i class="fas fa-arrow-down"></i></div>
+            <div class="summary-info">
+                <span class="summary-label">Max Drawdown</span>
+                <span class="summary-value negative">-${data.max_drawdown.toFixed(2)}%</span>
+            </div>
+        </div>`;
+}
+
+function renderEquityCurve(data) {
+    const eqDates = data.equity_curve.map(e => e.date);
+    const eqValues = data.equity_curve.map(e => e.value);
+    const priceDates = data.prices.map(p => p.date);
+    const priceValues = data.prices.map(p => p.price);
+
+    const priceNorm = priceValues.map(p => (p / priceValues[0]) * data.initial_capital);
+
+    const traces = [
+        {
+            x: eqDates, y: eqValues,
+            type: 'scatter', mode: 'lines',
+            name: data.strategy_name,
+            line: {color: '#1a6b3c', width: 2},
+            fill: 'tozeroy',
+            fillcolor: '#1a6b3c18',
+        },
+        {
+            x: priceDates, y: priceNorm,
+            type: 'scatter', mode: 'lines',
+            name: 'Buy & Hold',
+            line: {color: '#ffffff40', width: 1, dash: 'dot'},
+        }
+    ];
+
+    const buyDates = data.trades.filter(t => t.action === 'BUY').map(t => t.date);
+    const buyPrices = data.trades.filter(t => t.action === 'BUY').map(t => t.value);
+    const sellDates = data.trades.filter(t => t.action === 'SELL').map(t => t.date);
+    const sellPrices = data.trades.filter(t => t.action === 'SELL').map(t => t.value);
+
+    if (buyDates.length) {
+        traces.push({
+            x: buyDates, y: buyPrices,
+            type: 'scatter', mode: 'markers',
+            name: 'Buy',
+            marker: {color: '#00c853', size: 10, symbol: 'triangle-up'},
+        });
+    }
+    if (sellDates.length) {
+        traces.push({
+            x: sellDates, y: sellPrices,
+            type: 'scatter', mode: 'markers',
+            name: 'Sell',
+            marker: {color: '#ff1744', size: 10, symbol: 'triangle-down'},
+        });
+    }
+
+    const layout = {
+        paper_bgcolor: 'transparent',
+        plot_bgcolor: 'transparent',
+        font: {color: '#8fa393', family: 'Inter'},
+        margin: {l: 60, r: 20, t: 10, b: 40},
+        legend: {x: 0, y: 1.1, orientation: 'h'},
+        xaxis: {gridcolor: '#ffffff08'},
+        yaxis: {gridcolor: '#ffffff08', tickprefix: '$'},
+        hovermode: 'x unified',
+    };
+
+    Plotly.newPlot('equityChart', traces, layout, {responsive: true, displayModeBar: false});
+}
+
+function renderTradeLog(data) {
+    const container = document.getElementById('btTradeLog');
+    if (!data.trades.length) {
+        container.innerHTML = '<p class="empty-state">No trades executed by this strategy</p>';
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="table-responsive">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Action</th>
+                        <th>Price</th>
+                        <th>Shares</th>
+                        <th>Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${data.trades.map(t => `
+                        <tr>
+                            <td>${t.date}</td>
+                            <td><span class="trade-badge ${t.action.toLowerCase()}">${t.action}</span></td>
+                            <td>$${t.price.toFixed(2)}</td>
+                            <td>${t.shares}</td>
+                            <td>$${formatNumber(t.value)}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>`;
+}
+</script>
+{% endblock %}

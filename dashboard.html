@@ -1,0 +1,488 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="dashboard-grid">
+    <!-- Market Overview -->
+    <section class="card market-overview-card">
+        <div class="card-header">
+            <h2><i class="fas fa-globe"></i> Market Overview</h2>
+            <span class="refresh-btn" onclick="loadMarketOverview()"><i class="fas fa-sync-alt"></i></span>
+        </div>
+        <div class="card-body">
+            <div class="market-indices" id="marketIndices">
+                <div class="loading-placeholder">
+                    <div class="spinner"></div>
+                    <p>Loading market data...</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Watchlist -->
+    <section class="card watchlist-card">
+        <div class="card-header">
+            <h2><i class="fas fa-star"></i> Watchlist</h2>
+            <button class="btn btn-sm btn-primary" onclick="showAddWatchlist()">
+                <i class="fas fa-plus"></i> Add
+            </button>
+        </div>
+        <div class="card-body">
+            <div id="watchlistContent">
+                <div class="loading-placeholder">
+                    <div class="spinner"></div>
+                    <p>Loading watchlist...</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Portfolio Snapshot -->
+    <section class="card portfolio-snapshot-card">
+        <div class="card-header">
+            <h2><i class="fas fa-wallet"></i> Portfolio Snapshot</h2>
+            <a href="/portfolio" class="btn btn-sm btn-ghost">View All <i class="fas fa-arrow-right"></i></a>
+        </div>
+        <div class="card-body">
+            <div id="portfolioSnapshot">
+                <div class="loading-placeholder">
+                    <div class="spinner"></div>
+                    <p>Loading portfolio...</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Recent Trades -->
+    <section class="card recent-trades-card">
+        <div class="card-header">
+            <h2><i class="fas fa-history"></i> Recent Trades</h2>
+            <a href="/portfolio" class="btn btn-sm btn-ghost">View All <i class="fas fa-arrow-right"></i></a>
+        </div>
+        <div class="card-body">
+            <div id="recentTrades">
+                <div class="loading-placeholder">
+                    <div class="spinner"></div>
+                    <p>Loading trades...</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Active Orders -->
+    <section class="card orders-card">
+        <div class="card-header">
+            <h2><i class="fas fa-clock"></i> Active Orders</h2>
+            <a href="/portfolio" class="btn btn-sm btn-ghost">Manage <i class="fas fa-arrow-right"></i></a>
+        </div>
+        <div class="card-body">
+            <div id="dashActiveOrders">
+                <div class="loading-placeholder">
+                    <div class="spinner"></div>
+                    <p>Loading orders...</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Today's Trade Ideas -->
+    <section class="card trade-ideas-card">
+        <div class="card-header">
+            <h2><i class="fas fa-brain"></i> Today's Picks</h2>
+            <a href="/advisor" class="btn btn-sm btn-ghost">Full Advisor <i class="fas fa-arrow-right"></i></a>
+        </div>
+        <div class="card-body">
+            <div id="tradeIdeasContent">
+                <div class="loading-placeholder">
+                    <div class="spinner"></div>
+                    <p>Scanning for trade ideas...</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Quick Lookup -->
+    <section class="card quick-lookup-card">
+        <div class="card-header">
+            <h2><i class="fas fa-search-dollar"></i> Quick Lookup</h2>
+        </div>
+        <div class="card-body">
+            <div class="quick-lookup-form">
+                <input type="text" id="quickLookupInput" placeholder="Enter ticker (e.g. AAPL)" class="form-input" style="text-transform: uppercase;">
+                <button class="btn btn-primary" onclick="quickLookup()"><i class="fas fa-arrow-right"></i></button>
+            </div>
+            <div id="quickLookupResult"></div>
+        </div>
+    </section>
+</div>
+
+<!-- Add to Watchlist Modal -->
+<div class="modal-overlay" id="addWatchlistModal">
+    <div class="modal modal-sm">
+        <div class="modal-header">
+            <h3><i class="fas fa-star"></i> Add to Watchlist</h3>
+            <button class="modal-close" onclick="hideAddWatchlist()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>Ticker Symbol</label>
+                <input type="text" id="watchlistTicker" placeholder="e.g. AAPL" class="form-input" style="text-transform: uppercase;">
+            </div>
+            <div class="form-group">
+                <label>Notes (optional)</label>
+                <input type="text" id="watchlistNotes" placeholder="Why are you watching this?" class="form-input">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="hideAddWatchlist()">Cancel</button>
+            <button class="btn btn-primary" onclick="addToWatchlist()"><i class="fas fa-plus"></i> Add</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadMarketOverview();
+    loadWatchlist();
+    loadPortfolioSnapshot();
+    loadRecentTrades();
+    loadDashActiveOrders();
+    loadTradeIdeas();
+
+    // Periodically check orders (every 60s)
+    setInterval(checkDashOrders, 60000);
+
+    document.getElementById('quickLookupInput').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') quickLookup();
+    });
+});
+
+function loadMarketOverview() {
+    fetch('/api/market/overview')
+        .then(r => r.json())
+        .then(data => {
+            const container = document.getElementById('marketIndices');
+            if (!data.length) {
+                container.innerHTML = '<p class="empty-state">Could not load market data</p>';
+                return;
+            }
+            container.innerHTML = data.map(idx => `
+                <div class="index-card">
+                    <div class="index-name">${idx.name}</div>
+                    <div class="index-price">${formatNumber(idx.price)}</div>
+                    <div class="index-change ${idx.change >= 0 ? 'positive' : 'negative'}">
+                        <i class="fas fa-caret-${idx.change >= 0 ? 'up' : 'down'}"></i>
+                        ${idx.change >= 0 ? '+' : ''}${idx.change.toFixed(2)} (${idx.change >= 0 ? '+' : ''}${idx.change_percent.toFixed(2)}%)
+                    </div>
+                </div>
+            `).join('');
+        })
+        .catch(() => {
+            document.getElementById('marketIndices').innerHTML = '<p class="empty-state">Failed to load market data</p>';
+        });
+}
+
+function loadWatchlist() {
+    fetch('/api/watchlist')
+        .then(r => r.json())
+        .then(data => {
+            const container = document.getElementById('watchlistContent');
+            if (!data.length) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-star" style="font-size: 2rem; opacity: 0.3;"></i>
+                        <p>No stocks in watchlist</p>
+                        <button class="btn btn-sm btn-primary" onclick="showAddWatchlist()">Add your first stock</button>
+                    </div>`;
+                return;
+            }
+            container.innerHTML = `
+                <div class="watchlist-table">
+                    ${data.map(item => `
+                        <a href="/stock/${item.ticker}" class="watchlist-row">
+                            <div class="watchlist-ticker">
+                                <strong>${item.ticker}</strong>
+                                <span>${item.name || ''}</span>
+                            </div>
+                            <div class="watchlist-price">
+                                <strong>$${(item.price || 0).toFixed(2)}</strong>
+                                <span class="${(item.change || 0) >= 0 ? 'positive' : 'negative'}">
+                                    ${(item.change || 0) >= 0 ? '+' : ''}${(item.change || 0).toFixed(2)} (${(item.change_percent || 0).toFixed(2)}%)
+                                </span>
+                            </div>
+                            <button class="btn-icon remove-watch" onclick="event.preventDefault(); removeFromWatchlist('${item.ticker}')" title="Remove">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </a>
+                    `).join('')}
+                </div>`;
+        });
+}
+
+function loadPortfolioSnapshot() {
+    fetch('/api/portfolio')
+        .then(r => r.json())
+        .then(data => {
+            const container = document.getElementById('portfolioSnapshot');
+            const returnClass = data.total_return >= 0 ? 'positive' : 'negative';
+            container.innerHTML = `
+                <div class="portfolio-stats">
+                    <div class="stat-item stat-large">
+                        <span class="stat-label">Total Value</span>
+                        <span class="stat-value">$${formatNumber(data.total_portfolio_value)}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Cash</span>
+                        <span class="stat-value">$${formatNumber(data.cash_balance)}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Holdings</span>
+                        <span class="stat-value">$${formatNumber(data.holdings_value)}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Return</span>
+                        <span class="stat-value ${returnClass}">
+                            ${data.total_return >= 0 ? '+' : ''}$${formatNumber(data.total_return)}
+                            (${data.total_return_percent >= 0 ? '+' : ''}${data.total_return_percent.toFixed(2)}%)
+                        </span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Positions</span>
+                        <span class="stat-value">${data.num_positions}</span>
+                    </div>
+                </div>`;
+        });
+}
+
+function loadRecentTrades() {
+    fetch('/api/trades?limit=5')
+        .then(r => r.json())
+        .then(data => {
+            const container = document.getElementById('recentTrades');
+            if (!data.length) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-exchange-alt" style="font-size: 2rem; opacity: 0.3;"></i>
+                        <p>No trades yet</p>
+                        <button class="btn btn-sm btn-primary" onclick="openQuickTrade()">Make your first trade</button>
+                    </div>`;
+                return;
+            }
+            container.innerHTML = `
+                <div class="trades-list">
+                    ${data.map(t => `
+                        <div class="trade-row">
+                            <div class="trade-action ${t.action === 'BUY' ? 'buy' : 'sell'}">${t.action}</div>
+                            <div class="trade-info">
+                                <strong>${t.ticker}</strong>
+                                <span>${t.quantity} shares @ $${t.price.toFixed(2)}</span>
+                            </div>
+                            <div class="trade-total">$${formatNumber(t.total)}</div>
+                            <div class="trade-time">${formatDate(t.timestamp)}</div>
+                        </div>
+                    `).join('')}
+                </div>`;
+        });
+}
+
+function quickLookup() {
+    const ticker = document.getElementById('quickLookupInput').value.trim().toUpperCase();
+    if (!ticker) return;
+
+    const container = document.getElementById('quickLookupResult');
+    container.innerHTML = '<div class="spinner"></div>';
+
+    fetch(`/api/stock/${ticker}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                container.innerHTML = `<p class="error-text">${data.error}</p>`;
+                return;
+            }
+            const changeClass = data.change >= 0 ? 'positive' : 'negative';
+            container.innerHTML = `
+                <a href="/stock/${data.symbol}" class="quick-result-card">
+                    <div class="qr-header">
+                        <div>
+                            <h3>${data.symbol}</h3>
+                            <span>${data.name}</span>
+                        </div>
+                        <div class="qr-price">
+                            <strong>$${data.price.toFixed(2)}</strong>
+                            <span class="${changeClass}">
+                                ${data.change >= 0 ? '+' : ''}${data.change.toFixed(2)} (${data.change_percent.toFixed(2)}%)
+                            </span>
+                        </div>
+                    </div>
+                    <div class="qr-details">
+                        <span>Open: $${data.open.toFixed(2)}</span>
+                        <span>High: $${data.day_high.toFixed(2)}</span>
+                        <span>Low: $${data.day_low.toFixed(2)}</span>
+                        <span>Vol: ${formatLargeNumber(data.volume)}</span>
+                        <span>Mkt Cap: ${formatLargeNumber(data.market_cap)}</span>
+                        <span>P/E: ${data.pe_ratio ? data.pe_ratio.toFixed(2) : 'N/A'}</span>
+                    </div>
+                    <div class="qr-cta">View Full Analysis <i class="fas fa-arrow-right"></i></div>
+                </a>`;
+        })
+        .catch(() => {
+            container.innerHTML = '<p class="error-text">Failed to fetch stock data</p>';
+        });
+}
+
+function showAddWatchlist() {
+    document.getElementById('addWatchlistModal').classList.add('active');
+    document.getElementById('watchlistTicker').focus();
+}
+
+function hideAddWatchlist() {
+    document.getElementById('addWatchlistModal').classList.remove('active');
+}
+
+function addToWatchlist() {
+    const ticker = document.getElementById('watchlistTicker').value.trim().toUpperCase();
+    const notes = document.getElementById('watchlistNotes').value.trim();
+    if (!ticker) return;
+
+    fetch('/api/watchlist', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ticker, notes})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showToast(data.message, 'success');
+            hideAddWatchlist();
+            loadWatchlist();
+            document.getElementById('watchlistTicker').value = '';
+            document.getElementById('watchlistNotes').value = '';
+        } else {
+            showToast(data.error, 'error');
+        }
+    });
+}
+
+function removeFromWatchlist(ticker) {
+    fetch(`/api/watchlist/${ticker}`, {method: 'DELETE'})
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showToast(data.message, 'success');
+                loadWatchlist();
+            }
+        });
+}
+
+function loadDashActiveOrders() {
+    fetch('/api/orders')
+        .then(r => r.json())
+        .then(orders => {
+            const container = document.getElementById('dashActiveOrders');
+            if (!orders.length) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-clock" style="font-size: 1.5rem; opacity: 0.3;"></i>
+                        <p class="text-muted" style="font-size:0.85rem;">No active orders</p>
+                    </div>`;
+                return;
+            }
+            container.innerHTML = orders.slice(0, 5).map(o => {
+                const typeLabel = o.order_type.replace(/_/g, ' ');
+                const trailInfo = o.order_type === 'TRAILING_STOP' ? ` ${o.trail_percent}%` : '';
+                const distClass = o.action === 'SELL'
+                    ? (o.distance > 0 ? 'positive' : 'negative')
+                    : (o.distance < 0 ? 'positive' : 'negative');
+                return `
+                <div class="dash-order-row">
+                    <div class="dash-order-left">
+                        <span class="dash-order-ticker">${o.ticker}</span>
+                        <span class="order-type-badge order-${o.order_type.toLowerCase()}">${typeLabel}${trailInfo}</span>
+                    </div>
+                    <div class="dash-order-right">
+                        <span class="dash-order-trigger">@ $${o.trigger_price ? o.trigger_price.toFixed(2) : '—'}</span>
+                        <span class="${distClass}" style="font-size:0.8rem;">${Math.abs(o.distance_percent).toFixed(1)}% away</span>
+                    </div>
+                </div>`;
+            }).join('');
+        })
+        .catch(() => {
+            document.getElementById('dashActiveOrders').innerHTML = '<div class="empty-state"><p class="text-muted">Could not load orders</p></div>';
+        });
+}
+
+function checkDashOrders() {
+    fetch('/api/orders/check', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.triggered && data.triggered.length > 0) {
+                data.triggered.forEach(t => {
+                    showToast(`Order triggered: ${t.message}`, 'success');
+                });
+                loadDashActiveOrders();
+                loadPortfolioSnapshot();
+                loadRecentTrades();
+            }
+        });
+}
+
+function loadTradeIdeas() {
+    fetch('/api/scanner/picks?limit=5')
+        .then(r => r.json())
+        .then(data => {
+            const container = document.getElementById('tradeIdeasContent');
+
+            if (data.status === 'rate_limited' && data.total_scanned === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-clock" style="font-size: 2rem; opacity: 0.3; color: var(--orange);"></i>
+                        <p style="font-size:0.85rem">${data.message || 'Market data temporarily unavailable. Try again shortly.'}</p>
+                        <button class="btn btn-sm btn-primary" onclick="loadTradeIdeas()"><i class="fas fa-sync-alt"></i> Retry</button>
+                    </div>`;
+                return;
+            }
+
+            const picks = data.top_buys.slice(0, 5);
+            if (!picks.length) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-brain" style="font-size: 2rem; opacity: 0.3;"></i>
+                        <p>No strong buy signals right now</p>
+                        <a href="/advisor" class="btn btn-sm btn-primary">Open Advisor</a>
+                    </div>`;
+                return;
+            }
+            container.innerHTML = `
+                <div class="dashboard-ideas">
+                    ${picks.map(s => {
+                        const scoreClass = s.score >= 60 ? 'score-bullish' : s.score <= 35 ? 'score-bearish' : 'score-neutral';
+                        const dayClass = s.day_change >= 0 ? 'positive' : 'negative';
+                        const signalBg = s.score >= 60 ? 'background:rgba(46,170,78,0.12);color:var(--green)' : 'background:rgba(255,152,0,0.1);color:var(--orange)';
+                        return `
+                        <a href="/stock/${s.ticker}" class="dash-idea-row">
+                            <div class="dash-idea-score ${scoreClass}">${s.score.toFixed(0)}</div>
+                            <div class="dash-idea-info">
+                                <div class="dash-idea-ticker">${s.ticker}</div>
+                                <div class="dash-idea-name">${s.name}</div>
+                            </div>
+                            <span class="dash-idea-signal" style="${signalBg}">${s.action}</span>
+                            <div class="dash-idea-price-col">
+                                <div class="dash-idea-price">$${s.price.toFixed(2)}</div>
+                                <div class="dash-idea-change ${dayClass}">${s.day_change >= 0 ? '+' : ''}${s.day_change.toFixed(2)}%</div>
+                            </div>
+                        </a>`;
+                    }).join('')}
+                </div>
+                <div style="text-align:center;padding-top:0.75rem;">
+                    <span style="font-size:0.75rem;color:var(--text-muted)">${data.total_scanned} stocks scanned &bull; ${data.generated_at}</span>
+                </div>`;
+        })
+        .catch(() => {
+            document.getElementById('tradeIdeasContent').innerHTML = '<p class="empty-state">Could not load trade ideas</p>';
+        });
+}
+</script>
+{% endblock %}

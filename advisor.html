@@ -1,0 +1,400 @@
+{% extends "base.html" %}
+{% block title %}Advisor{% endblock %}
+{% block page_title %}Trade Advisor{% endblock %}
+
+{% block content %}
+<div class="advisor-page">
+    <!-- Header Banner -->
+    <section class="card advisor-hero">
+        <div class="advisor-hero-content">
+            <div class="advisor-hero-icon">
+                <i class="fas fa-brain"></i>
+            </div>
+            <div class="advisor-hero-text">
+                <h2>Today's Trade Ideas</h2>
+                <p id="advisorTimestamp">Analyzing the market...</p>
+            </div>
+            <div class="advisor-hero-actions">
+                <button class="btn btn-primary" onclick="refreshAdvisor()">
+                    <i class="fas fa-sync-alt"></i> Refresh Analysis
+                </button>
+                <button class="btn btn-secondary" onclick="showTradePlan()">
+                    <i class="fas fa-clipboard-list"></i> Full Trade Plan
+                </button>
+            </div>
+        </div>
+        <div class="advisor-stats" id="advisorStats">
+            <div class="advisor-stat">
+                <span class="advisor-stat-value" id="statScanned">—</span>
+                <span class="advisor-stat-label">Stocks Scanned</span>
+            </div>
+            <div class="advisor-stat">
+                <span class="advisor-stat-value positive" id="statBuys">—</span>
+                <span class="advisor-stat-label">Buy Signals</span>
+            </div>
+            <div class="advisor-stat">
+                <span class="advisor-stat-value negative" id="statSells">—</span>
+                <span class="advisor-stat-label">Sell Signals</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Top Buy Ideas -->
+    <section class="card">
+        <div class="card-header">
+            <h2><i class="fas fa-arrow-trend-up"></i> Top Buy Ideas</h2>
+            <span class="badge badge-green">Bullish Signals</span>
+        </div>
+        <div class="card-body" id="topBuysContainer">
+            <div class="loading-placeholder">
+                <div class="spinner"></div>
+                <p>Scanning market for opportunities...</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Sell / Caution Ideas -->
+    <section class="card">
+        <div class="card-header">
+            <h2><i class="fas fa-arrow-trend-down"></i> Caution / Sell Signals</h2>
+            <span class="badge badge-red">Bearish Signals</span>
+        </div>
+        <div class="card-body" id="topSellsContainer">
+            <div class="loading-placeholder">
+                <div class="spinner"></div>
+                <p>Identifying risk areas...</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Full Trade Plan Modal -->
+    <div class="card" id="tradePlanSection" style="display: none;">
+        <div class="card-header">
+            <h2><i class="fas fa-clipboard-list"></i> Detailed Trade Plan</h2>
+            <button class="btn btn-sm btn-ghost" onclick="hideTradePlan()">Close <i class="fas fa-times"></i></button>
+        </div>
+        <div class="card-body" id="tradePlanContainer">
+            <div class="loading-placeholder">
+                <div class="spinner"></div>
+                <p>Generating trade plan with entry/exit levels...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Full Stock Rankings -->
+    <section class="card">
+        <div class="card-header">
+            <h2><i class="fas fa-ranking-star"></i> Full Market Rankings</h2>
+            <div class="advisor-filter-group">
+                <select id="sectorFilter" class="form-input form-input-sm" onchange="filterRankings()">
+                    <option value="">All Sectors</option>
+                </select>
+                <select id="actionFilter" class="form-input form-input-sm" onchange="filterRankings()">
+                    <option value="">All Signals</option>
+                    <option value="BUY">Buy</option>
+                    <option value="CONSIDER BUYING">Consider Buying</option>
+                    <option value="HOLD">Hold</option>
+                    <option value="CONSIDER SELLING">Consider Selling</option>
+                    <option value="SELL">Sell</option>
+                </select>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="data-table" id="rankingsTable">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Ticker</th>
+                            <th>Name</th>
+                            <th>Price</th>
+                            <th>Day</th>
+                            <th>Week</th>
+                            <th>Month</th>
+                            <th>RSI</th>
+                            <th>Vol Ratio</th>
+                            <th>Score</th>
+                            <th>Signal</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="rankingsBody">
+                        <tr>
+                            <td colspan="12" class="loading-placeholder">
+                                <div class="spinner"></div>
+                                <p>Loading rankings...</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- Disclaimer -->
+    <div class="advisor-disclaimer">
+        <i class="fas fa-info-circle"></i>
+        <span>All recommendations are based on technical analysis of price data and should not be considered financial advice. Always do your own research before making investment decisions.</span>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allRankings = [];
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadAdvisorPicks();
+});
+
+function loadAdvisorPicks() {
+    document.getElementById('topBuysContainer').innerHTML = '<div class="loading-placeholder"><div class="spinner"></div><p>Scanning market for opportunities...</p></div>';
+    document.getElementById('topSellsContainer').innerHTML = '<div class="loading-placeholder"><div class="spinner"></div><p>Identifying risk areas...</p></div>';
+
+    fetch('/api/scanner/picks?limit=10')
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'rate_limited' && data.total_scanned === 0) {
+                const msg = data.message || 'Yahoo Finance rate limit active. Please wait a couple minutes and try again.';
+                document.getElementById('advisorTimestamp').textContent = msg;
+                const retryHtml = `
+                    <div class="empty-state">
+                        <i class="fas fa-clock" style="font-size: 2rem; opacity: 0.4; color: var(--orange);"></i>
+                        <p style="max-width:400px">${msg}</p>
+                        <button class="btn btn-primary" onclick="refreshAdvisor()" style="margin-top:0.5rem">
+                            <i class="fas fa-sync-alt"></i> Retry Now
+                        </button>
+                    </div>`;
+                document.getElementById('topBuysContainer').innerHTML = retryHtml;
+                document.getElementById('topSellsContainer').innerHTML = '<div class="empty-state"><p>Waiting for data...</p></div>';
+                document.getElementById('statScanned').textContent = '—';
+                document.getElementById('statBuys').textContent = '—';
+                document.getElementById('statSells').textContent = '—';
+                return;
+            }
+
+            const statusNote = data.status === 'rate_limited' ? ' (partial — some data from cache)' : '';
+            document.getElementById('advisorTimestamp').textContent = `Analysis generated ${data.generated_at}${statusNote}`;
+            document.getElementById('statScanned').textContent = data.total_scanned;
+            document.getElementById('statBuys').textContent = data.top_buys.length;
+            document.getElementById('statSells').textContent = data.top_sells.length;
+
+            renderBuyIdeas(data.top_buys);
+            renderSellIdeas(data.top_sells);
+
+            allRankings = data.all_ranked;
+            populateSectorFilter(allRankings);
+            renderRankings(allRankings);
+        })
+        .catch(err => {
+            document.getElementById('topBuysContainer').innerHTML = '<div class="empty-state"><i class="fas fa-exclamation-triangle" style="font-size:2rem;opacity:0.3"></i><p>Failed to load analysis. Try refreshing.</p><button class="btn btn-primary" onclick="refreshAdvisor()"><i class="fas fa-sync-alt"></i> Retry</button></div>';
+            document.getElementById('topSellsContainer').innerHTML = '';
+        });
+}
+
+function renderBuyIdeas(buys) {
+    const container = document.getElementById('topBuysContainer');
+    if (!buys.length) {
+        container.innerHTML = '<div class="empty-state"><i class="fas fa-search" style="font-size:2rem;opacity:0.3"></i><p>No strong buy signals detected right now</p></div>';
+        return;
+    }
+    container.innerHTML = `<div class="idea-cards">${buys.map((s, i) => renderIdeaCard(s, i + 1, 'buy')).join('')}</div>`;
+}
+
+function renderSellIdeas(sells) {
+    const container = document.getElementById('topSellsContainer');
+    if (!sells.length) {
+        container.innerHTML = '<div class="empty-state"><i class="fas fa-check-circle" style="font-size:2rem;opacity:0.3"></i><p>No strong sell signals — market looks stable</p></div>';
+        return;
+    }
+    container.innerHTML = `<div class="idea-cards">${sells.map((s, i) => renderIdeaCard(s, i + 1, 'sell')).join('')}</div>`;
+}
+
+function renderIdeaCard(stock, rank, type) {
+    const scoreClass = stock.score >= 60 ? 'score-bullish' : stock.score <= 35 ? 'score-bearish' : 'score-neutral';
+    const dayClass = stock.day_change >= 0 ? 'positive' : 'negative';
+    const monthClass = stock.month_return >= 0 ? 'positive' : 'negative';
+
+    return `
+    <div class="idea-card idea-card-${type}">
+        <div class="idea-rank">#${rank}</div>
+        <div class="idea-header">
+            <div class="idea-ticker-info">
+                <a href="/stock/${stock.ticker}" class="idea-ticker">${stock.ticker}</a>
+                <span class="idea-name">${stock.name}</span>
+                <span class="idea-sector">${stock.sector}</span>
+            </div>
+            <div class="idea-score ${scoreClass}">
+                <span class="score-number">${stock.score.toFixed(0)}</span>
+                <span class="score-label">Score</span>
+            </div>
+        </div>
+        <div class="idea-price-row">
+            <div class="idea-price">$${stock.price.toFixed(2)}</div>
+            <div class="idea-changes">
+                <span class="${dayClass}">Day: ${stock.day_change >= 0 ? '+' : ''}${stock.day_change.toFixed(2)}%</span>
+                <span class="${monthClass}">Month: ${stock.month_return >= 0 ? '+' : ''}${stock.month_return.toFixed(1)}%</span>
+            </div>
+        </div>
+        <div class="idea-metrics">
+            <div class="idea-metric">
+                <span class="metric-label">RSI</span>
+                <span class="metric-value ${stock.rsi < 30 ? 'positive' : stock.rsi > 70 ? 'negative' : ''}">${stock.rsi.toFixed(0)}</span>
+            </div>
+            <div class="idea-metric">
+                <span class="metric-label">Volume</span>
+                <span class="metric-value ${stock.volume_ratio > 1.5 ? 'text-orange' : ''}">${stock.volume_ratio.toFixed(1)}x</span>
+            </div>
+            <div class="idea-metric">
+                <span class="metric-label">Signal</span>
+                <span class="metric-value idea-action idea-action-${stock.action.toLowerCase().replace(/ /g, '-')}">${stock.action}</span>
+            </div>
+        </div>
+        <div class="idea-reasons">
+            ${stock.reasons.map(r => `<div class="idea-reason"><i class="fas fa-circle-${type === 'buy' ? 'check' : 'xmark'}"></i> ${r}</div>`).join('')}
+        </div>
+        <div class="idea-actions">
+            <a href="/stock/${stock.ticker}" class="btn btn-sm btn-ghost">Full Analysis <i class="fas fa-arrow-right"></i></a>
+            <button class="btn btn-sm btn-primary" onclick="openQuickTrade(); document.getElementById('tradeTicker').value='${stock.ticker}'; updateQuickTradePreview();">
+                <i class="fas fa-exchange-alt"></i> Trade
+            </button>
+        </div>
+    </div>`;
+}
+
+function renderRankings(data) {
+    const body = document.getElementById('rankingsBody');
+    if (!data.length) {
+        body.innerHTML = '<tr><td colspan="12" class="empty-state">No results</td></tr>';
+        return;
+    }
+    body.innerHTML = data.map((s, i) => {
+        const dayClass = s.day_change >= 0 ? 'positive' : 'negative';
+        const weekClass = s.week_return >= 0 ? 'positive' : 'negative';
+        const monthClass = s.month_return >= 0 ? 'positive' : 'negative';
+        const scoreClass = s.score >= 60 ? 'score-bullish' : s.score <= 35 ? 'score-bearish' : 'score-neutral';
+        const actionClass = s.action.toLowerCase().replace(/ /g, '-');
+        return `
+        <tr>
+            <td>${i + 1}</td>
+            <td><a href="/stock/${s.ticker}" class="ticker-link">${s.ticker}</a></td>
+            <td class="text-muted">${truncate(s.name, 20)}</td>
+            <td>$${s.price.toFixed(2)}</td>
+            <td class="${dayClass}">${s.day_change >= 0 ? '+' : ''}${s.day_change.toFixed(2)}%</td>
+            <td class="${weekClass}">${s.week_return >= 0 ? '+' : ''}${s.week_return.toFixed(1)}%</td>
+            <td class="${monthClass}">${s.month_return >= 0 ? '+' : ''}${s.month_return.toFixed(1)}%</td>
+            <td class="${s.rsi < 30 ? 'positive' : s.rsi > 70 ? 'negative' : ''}">${s.rsi.toFixed(0)}</td>
+            <td class="${s.volume_ratio > 1.5 ? 'text-orange' : ''}">${s.volume_ratio.toFixed(1)}x</td>
+            <td><span class="score-badge ${scoreClass}">${s.score.toFixed(0)}</span></td>
+            <td><span class="signal-badge signal-${actionClass}">${s.action}</span></td>
+            <td><a href="/stock/${s.ticker}" class="btn-icon" title="View"><i class="fas fa-arrow-right"></i></a></td>
+        </tr>`;
+    }).join('');
+}
+
+function populateSectorFilter(data) {
+    const sectors = [...new Set(data.map(s => s.sector).filter(s => s && s !== 'N/A'))].sort();
+    const select = document.getElementById('sectorFilter');
+    select.innerHTML = '<option value="">All Sectors</option>' + sectors.map(s => `<option value="${s}">${s}</option>`).join('');
+}
+
+function filterRankings() {
+    const sector = document.getElementById('sectorFilter').value;
+    const action = document.getElementById('actionFilter').value;
+    let filtered = allRankings;
+    if (sector) filtered = filtered.filter(s => s.sector === sector);
+    if (action) filtered = filtered.filter(s => s.action === action);
+    renderRankings(filtered);
+}
+
+function refreshAdvisor() {
+    loadAdvisorPicks();
+    showToast('Refreshing market analysis...', 'info');
+}
+
+function showTradePlan() {
+    const section = document.getElementById('tradePlanSection');
+    section.style.display = 'block';
+    section.scrollIntoView({ behavior: 'smooth' });
+    const container = document.getElementById('tradePlanContainer');
+    container.innerHTML = '<div class="loading-placeholder"><div class="spinner"></div><p>Generating detailed trade plan with entry/exit levels...</p></div>';
+
+    fetch('/api/scanner/plan')
+        .then(r => r.json())
+        .then(data => {
+            if (!data.plan || !data.plan.length) {
+                container.innerHTML = '<div class="empty-state"><p>No actionable trades found right now</p></div>';
+                return;
+            }
+            container.innerHTML = `
+                <p class="plan-meta">Generated ${data.generated_at} &bull; ${data.total_scanned} stocks analyzed</p>
+                <div class="trade-plan-grid">
+                    ${data.plan.map(p => renderPlanCard(p)).join('')}
+                </div>`;
+        })
+        .catch(() => {
+            container.innerHTML = '<p class="empty-state">Failed to generate trade plan</p>';
+        });
+}
+
+function hideTradePlan() {
+    document.getElementById('tradePlanSection').style.display = 'none';
+}
+
+function renderPlanCard(p) {
+    const isBuy = p.action === 'BUY';
+    return `
+    <div class="plan-card plan-card-${isBuy ? 'buy' : 'sell'}">
+        <div class="plan-header">
+            <div>
+                <span class="plan-ticker">${p.ticker}</span>
+                <span class="plan-name">${p.name}</span>
+            </div>
+            <span class="plan-action-badge plan-action-${isBuy ? 'buy' : 'sell'}">${p.action}</span>
+        </div>
+        <div class="plan-price">$${p.current_price.toFixed(2)} <span class="plan-sector">${p.sector}</span></div>
+        ${isBuy ? `
+        <div class="plan-levels">
+            <div class="plan-level">
+                <span class="plan-level-label">Entry Zone</span>
+                <span class="plan-level-value">${p.entry_zone}</span>
+            </div>
+            <div class="plan-level plan-level-red">
+                <span class="plan-level-label">Stop Loss</span>
+                <span class="plan-level-value">$${p.stop_loss.toFixed(2)}</span>
+            </div>
+            <div class="plan-level plan-level-green">
+                <span class="plan-level-label">Target 1</span>
+                <span class="plan-level-value">$${p.target_1.toFixed(2)}</span>
+            </div>
+            <div class="plan-level plan-level-green">
+                <span class="plan-level-label">Target 2</span>
+                <span class="plan-level-value">$${p.target_2.toFixed(2)}</span>
+            </div>
+            <div class="plan-level">
+                <span class="plan-level-label">Risk/Reward</span>
+                <span class="plan-level-value">${p.risk_reward}:1</span>
+            </div>
+        </div>` : ''}
+        <div class="plan-details">
+            <span>RSI: ${p.rsi.toFixed(0)}</span>
+            <span>Vol: ${p.volume_ratio.toFixed(1)}x</span>
+            <span>Score: ${p.score.toFixed(0)}/100</span>
+            ${p.analyst_consensus !== 'N/A' ? `<span>Analysts: ${p.analyst_consensus}</span>` : ''}
+        </div>
+        <div class="plan-reasons">
+            ${p.reasons.map(r => `<div class="plan-reason"><i class="fas fa-chevron-right"></i> ${r}</div>`).join('')}
+        </div>
+        <div class="plan-actions">
+            <a href="/stock/${p.ticker}" class="btn btn-sm btn-ghost">Analysis <i class="fas fa-arrow-right"></i></a>
+            ${isBuy ? `<button class="btn btn-sm btn-primary" onclick="openQuickTrade(); document.getElementById('tradeTicker').value='${p.ticker}'; updateQuickTradePreview();">Trade <i class="fas fa-exchange-alt"></i></button>` : ''}
+        </div>
+    </div>`;
+}
+
+function truncate(str, len) {
+    if (!str) return '';
+    return str.length > len ? str.substring(0, len) + '...' : str;
+}
+</script>
+{% endblock %}

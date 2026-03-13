@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block page_title %}Settings{% endblock %}
+
+{% block content %}
+<div class="settings-page">
+    <!-- Broker Integration -->
+    <section class="card">
+        <div class="card-header">
+            <h2><i class="fas fa-plug"></i> Broker Integration</h2>
+        </div>
+        <div class="card-body">
+            <div class="broker-grid">
+                <div class="broker-card">
+                    <div class="broker-header">
+                        <div class="broker-icon alpaca"><i class="fas fa-mountain"></i></div>
+                        <div>
+                            <h3>Alpaca</h3>
+                            <span class="broker-status" id="alpacaStatus">Not Connected</span>
+                        </div>
+                    </div>
+                    <p class="broker-desc">Commission-free stock trading API. Supports paper and live trading with a modern REST API. Recommended for automated strategies.</p>
+                    <div class="form-group">
+                        <label>API Key</label>
+                        <input type="password" id="alpacaKey" class="form-input" placeholder="Your Alpaca API key">
+                    </div>
+                    <div class="form-group">
+                        <label>Secret Key</label>
+                        <input type="password" id="alpacaSecret" class="form-input" placeholder="Your Alpaca secret key">
+                    </div>
+                    <div class="form-group">
+                        <label>Environment</label>
+                        <select id="alpacaEnv" class="form-input">
+                            <option value="paper">Paper Trading</option>
+                            <option value="live">Live Trading</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary" onclick="saveAlpacaSettings()">
+                        <i class="fas fa-save"></i> Save & Connect
+                    </button>
+                </div>
+
+                <div class="broker-card">
+                    <div class="broker-header">
+                        <div class="broker-icon fidelity"><i class="fas fa-university"></i></div>
+                        <div>
+                            <h3>Fidelity</h3>
+                            <span class="broker-status pending">Coming Soon</span>
+                        </div>
+                    </div>
+                    <p class="broker-desc">Fidelity does not currently offer a public trading API. However, you can use Élephante for analysis and execute trades manually on Fidelity's platform.</p>
+                    <div class="integration-note">
+                        <i class="fas fa-info-circle"></i>
+                        <div>
+                            <strong>Workaround Options:</strong>
+                            <ul>
+                                <li>Use Élephante's paper trading to model strategies</li>
+                                <li>Export trade signals and execute on Fidelity manually</li>
+                                <li>Connect via Alpaca for automated execution</li>
+                                <li>We're monitoring Fidelity's API developments</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="broker-card">
+                    <div class="broker-header">
+                        <div class="broker-icon td"><i class="fas fa-chart-line"></i></div>
+                        <div>
+                            <h3>TD Ameritrade / Schwab</h3>
+                            <span class="broker-status pending">Planned</span>
+                        </div>
+                    </div>
+                    <p class="broker-desc">Integration with Charles Schwab's API (formerly TD Ameritrade) is planned for a future release.</p>
+                </div>
+
+                <div class="broker-card">
+                    <div class="broker-header">
+                        <div class="broker-icon ibkr"><i class="fas fa-globe"></i></div>
+                        <div>
+                            <h3>Interactive Brokers</h3>
+                            <span class="broker-status pending">Planned</span>
+                        </div>
+                    </div>
+                    <p class="broker-desc">IBKR TWS API integration is planned for advanced users who need access to global markets.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Paper Trading Settings -->
+    <section class="card">
+        <div class="card-header">
+            <h2><i class="fas fa-money-bill-wave"></i> Paper Trading</h2>
+        </div>
+        <div class="card-body">
+            <div class="settings-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Default Starting Balance</label>
+                        <input type="number" id="defaultBalance" class="form-input" value="100000" min="1000" step="1000">
+                    </div>
+                </div>
+                <p class="text-muted">This balance is used when resetting your paper trading account.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Display Settings -->
+    <section class="card">
+        <div class="card-header">
+            <h2><i class="fas fa-palette"></i> Display Preferences</h2>
+        </div>
+        <div class="card-body">
+            <div class="settings-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Default Chart Period</label>
+                        <select id="defaultChartPeriod" class="form-input">
+                            <option value="1mo">1 Month</option>
+                            <option value="3mo">3 Months</option>
+                            <option value="6mo">6 Months</option>
+                            <option value="1y" selected>1 Year</option>
+                            <option value="2y">2 Years</option>
+                            <option value="5y">5 Years</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Currency Display</label>
+                        <select id="currencyDisplay" class="form-input">
+                            <option value="USD">USD ($)</option>
+                            <option value="EUR">EUR (€)</option>
+                            <option value="GBP">GBP (£)</option>
+                        </select>
+                    </div>
+                </div>
+                <button class="btn btn-primary" onclick="saveDisplaySettings()">
+                    <i class="fas fa-save"></i> Save Preferences
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- About -->
+    <section class="card">
+        <div class="card-header">
+            <h2><i class="fas fa-info-circle"></i> About Élephante</h2>
+        </div>
+        <div class="card-body">
+            <div class="about-section">
+                <div class="about-logo">
+                    <svg class="logo-icon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style="width: 80px; height: 80px; color: #1a6b3c;">
+                        <ellipse cx="50" cy="52" rx="28" ry="24" fill="currentColor" opacity="0.9"/>
+                        <ellipse cx="25" cy="42" rx="16" ry="20" fill="currentColor" opacity="0.7" transform="rotate(-15, 25, 42)"/>
+                        <ellipse cx="75" cy="42" rx="16" ry="20" fill="currentColor" opacity="0.7" transform="rotate(15, 75, 42)"/>
+                        <circle cx="38" cy="46" r="3" fill="#121a15"/>
+                        <circle cx="62" cy="46" r="3" fill="#121a15"/>
+                        <path d="M 45 58 Q 50 64 55 58" stroke="#121a15" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+                        <path d="M 50 58 L 50 68 Q 48 72 46 68" stroke="#121a15" stroke-width="2" fill="none" stroke-linecap="round"/>
+                        <circle cx="39" cy="47" r="1" fill="white" opacity="0.8"/>
+                        <circle cx="63" cy="47" r="1" fill="white" opacity="0.8"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3>Élephante Stock Analyzer</h3>
+                    <p>Version 1.0.0</p>
+                    <p class="text-muted">A comprehensive stock analysis and paper trading platform. Track stocks, analyze technical indicators, backtest strategies, and paper trade — all in one place.</p>
+                    <p class="text-muted" style="margin-top: 0.5rem;"><strong>Disclaimer:</strong> This tool is for educational and research purposes only. It does not constitute financial advice. Always do your own research before making investment decisions.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadSettings();
+});
+
+function loadSettings() {
+    fetch('/api/settings')
+        .then(r => r.json())
+        .then(data => {
+            if (data.alpaca_key) document.getElementById('alpacaKey').value = data.alpaca_key;
+            if (data.alpaca_secret) document.getElementById('alpacaSecret').value = data.alpaca_secret;
+            if (data.alpaca_env) document.getElementById('alpacaEnv').value = data.alpaca_env;
+            if (data.default_balance) document.getElementById('defaultBalance').value = data.default_balance;
+            if (data.default_chart_period) document.getElementById('defaultChartPeriod').value = data.default_chart_period;
+            if (data.currency_display) document.getElementById('currencyDisplay').value = data.currency_display;
+
+            if (data.alpaca_key && data.alpaca_secret) {
+                document.getElementById('alpacaStatus').textContent = 'Connected';
+                document.getElementById('alpacaStatus').classList.add('connected');
+            }
+        });
+}
+
+function saveAlpacaSettings() {
+    const settings = {
+        alpaca_key: document.getElementById('alpacaKey').value,
+        alpaca_secret: document.getElementById('alpacaSecret').value,
+        alpaca_env: document.getElementById('alpacaEnv').value,
+    };
+
+    fetch('/api/settings', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(settings)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Alpaca settings saved', 'success');
+            document.getElementById('alpacaStatus').textContent = 'Connected';
+            document.getElementById('alpacaStatus').classList.add('connected');
+        }
+    });
+}
+
+function saveDisplaySettings() {
+    const settings = {
+        default_balance: document.getElementById('defaultBalance').value,
+        default_chart_period: document.getElementById('defaultChartPeriod').value,
+        currency_display: document.getElementById('currencyDisplay').value,
+    };
+
+    fetch('/api/settings', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(settings)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) showToast('Preferences saved', 'success');
+    });
+}
+</script>
+{% endblock %}

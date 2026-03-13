@@ -1,0 +1,722 @@
+{% extends "base.html" %}
+{% block title %}{{ ticker }}{% endblock %}
+{% block page_title %}<span id="stockPageTitle">{{ ticker }}</span>{% endblock %}
+
+{% block content %}
+<div class="stock-detail-page" id="stockDetail" data-ticker="{{ ticker }}">
+    <!-- Stock Header -->
+    <section class="stock-header card" id="stockHeader">
+        <div class="loading-placeholder"><div class="spinner"></div><p>Loading stock data...</p></div>
+    </section>
+
+    <!-- Chart Section -->
+    <section class="card chart-card">
+        <div class="card-header">
+            <h2><i class="fas fa-chart-area"></i> Price Chart</h2>
+            <div class="chart-controls">
+                <div class="period-buttons">
+                    <button class="period-btn" data-period="5d" data-interval="5m">1W</button>
+                    <button class="period-btn" data-period="1mo" data-interval="1d">1M</button>
+                    <button class="period-btn" data-period="3mo" data-interval="1d">3M</button>
+                    <button class="period-btn" data-period="6mo" data-interval="1d">6M</button>
+                    <button class="period-btn active" data-period="1y" data-interval="1d">1Y</button>
+                    <button class="period-btn" data-period="2y" data-interval="1wk">2Y</button>
+                    <button class="period-btn" data-period="5y" data-interval="1wk">5Y</button>
+                    <button class="period-btn" data-period="max" data-interval="1mo">MAX</button>
+                </div>
+            </div>
+        </div>
+        <div class="card-body chart-body">
+            <div id="priceChart" style="width: 100%; height: 420px;"></div>
+        </div>
+    </section>
+
+    <!-- Options Chain -->
+    <section class="card options-chain-card">
+        <div class="card-header">
+            <h2><i class="fas fa-layer-group"></i> Options Chain</h2>
+            <div class="options-controls">
+                <select id="optExpiration" class="form-input" style="width: auto; min-width: 150px;" onchange="loadOptionsChain()">
+                    <option value="">Loading expirations...</option>
+                </select>
+                <div class="toggle-group" id="optSideToggle">
+                    <button class="toggle-btn active" onclick="showOptionsSide('calls', this)">Calls</button>
+                    <button class="toggle-btn" onclick="showOptionsSide('puts', this)">Puts</button>
+                    <button class="toggle-btn" onclick="showOptionsSide('both', this)">Both</button>
+                </div>
+            </div>
+        </div>
+        <div class="card-body" id="optionsChainBody" style="padding: 0;">
+            <div class="loading-placeholder"><div class="spinner"></div><p>Loading options...</p></div>
+        </div>
+    </section>
+
+    <div class="stock-detail-grid">
+        <!-- Key Stats -->
+        <section class="card">
+            <div class="card-header"><h2><i class="fas fa-chart-bar"></i> Key Statistics</h2></div>
+            <div class="card-body" id="keyStats">
+                <div class="loading-placeholder"><div class="spinner"></div></div>
+            </div>
+        </section>
+
+        <!-- Analyst Recommendations -->
+        <section class="card">
+            <div class="card-header"><h2><i class="fas fa-users"></i> Analyst Ratings</h2></div>
+            <div class="card-body" id="analystRatings">
+                <div class="loading-placeholder"><div class="spinner"></div></div>
+            </div>
+        </section>
+
+        <!-- AI Advisor -->
+        <section class="card advisor-card">
+            <div class="card-header">
+                <h2><i class="fas fa-robot"></i> Élephante Advisor</h2>
+                <button class="btn btn-sm btn-primary" onclick="loadAdvice()"><i class="fas fa-brain"></i> Analyze</button>
+            </div>
+            <div class="card-body" id="advisorContent">
+                <div class="empty-state">
+                    <i class="fas fa-robot" style="font-size: 2rem; opacity: 0.3;"></i>
+                    <p>Click "Analyze" to get AI-powered technical analysis and advice</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Trade Panel -->
+        <section class="card trade-panel-card">
+            <div class="card-header"><h2><i class="fas fa-exchange-alt"></i> Paper Trade</h2></div>
+            <div class="card-body">
+                <div class="trade-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Action</label>
+                            <div class="toggle-group">
+                                <button class="toggle-btn active" data-action="BUY" onclick="setTradeAction(this, 'BUY')">Buy</button>
+                                <button class="toggle-btn" data-action="SELL" onclick="setTradeAction(this, 'SELL')">Sell</button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Quantity</label>
+                            <input type="number" id="stockTradeQty" class="form-input" placeholder="0" min="0.01" step="0.01">
+                        </div>
+                    </div>
+                    <div class="trade-estimate" id="stockTradeEstimate"></div>
+                    <button class="btn btn-primary btn-block" onclick="placeStockTrade()">
+                        <i class="fas fa-check"></i> Execute Trade
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Company Info -->
+        <section class="card company-info-card">
+            <div class="card-header"><h2><i class="fas fa-building"></i> About</h2></div>
+            <div class="card-body" id="companyInfo">
+                <div class="loading-placeholder"><div class="spinner"></div></div>
+            </div>
+        </section>
+
+        <!-- Recent Analyst Actions -->
+        <section class="card">
+            <div class="card-header"><h2><i class="fas fa-clipboard-list"></i> Recent Analyst Actions</h2></div>
+            <div class="card-body" id="analystActions">
+                <div class="loading-placeholder"><div class="spinner"></div></div>
+            </div>
+        </section>
+    </div>
+</div>
+
+<!-- Options Trade Modal -->
+<div class="modal-overlay" id="optionsTradeModal" onclick="if(event.target===this)closeOptionsTrade()">
+    <div class="modal">
+        <div class="modal-header">
+            <h3><i class="fas fa-layer-group"></i> Options Trade</h3>
+            <button class="modal-close" onclick="closeOptionsTrade()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="opt-trade-summary">
+                <div class="opt-detail-row">
+                    <span class="opt-label">Type</span>
+                    <span class="opt-val" id="otType">—</span>
+                </div>
+                <div class="opt-detail-row">
+                    <span class="opt-label">Strike</span>
+                    <span class="opt-val" id="otStrike">—</span>
+                </div>
+                <div class="opt-detail-row">
+                    <span class="opt-label">Expiration</span>
+                    <span class="opt-val" id="otExp">—</span>
+                </div>
+                <div class="opt-detail-row">
+                    <span class="opt-label">Ask</span>
+                    <span class="opt-val" id="otAsk">—</span>
+                </div>
+                <div class="opt-detail-row">
+                    <span class="opt-label">Bid</span>
+                    <span class="opt-val" id="otBid">—</span>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Action</label>
+                    <select id="otAction" class="form-input" onchange="updateOptionsEstimate()">
+                        <option value="BUY">Buy to Open</option>
+                        <option value="SELL">Sell to Close</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Contracts</label>
+                    <input type="number" id="otContracts" class="form-input" value="1" min="1" step="1" onchange="updateOptionsEstimate()" oninput="updateOptionsEstimate()">
+                </div>
+            </div>
+            <div class="trade-estimate" id="otEstimate"></div>
+            <div class="form-group">
+                <label>Notes (optional)</label>
+                <input type="text" id="otNotes" class="form-input" placeholder="Trade thesis...">
+            </div>
+            <p class="text-muted" style="font-size: 0.75rem;">Each contract represents 100 shares of the underlying stock.</p>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeOptionsTrade()">Cancel</button>
+            <button class="btn btn-primary" onclick="executeOptionsTrade()"><i class="fas fa-check"></i> Execute</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const TICKER = '{{ ticker }}';
+let stockData = null;
+let currentTradeAction = 'BUY';
+
+let optionsData = null;
+let currentOptionsSide = 'calls';
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadStockData();
+    loadChart('1y', '1d');
+    loadRecommendations();
+    loadOptionsExpirations();
+
+    document.querySelectorAll('.period-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            loadChart(this.dataset.period, this.dataset.interval);
+        });
+    });
+
+    document.getElementById('stockTradeQty').addEventListener('input', updateTradeEstimate);
+});
+
+function loadStockData() {
+    fetch(`/api/stock/${TICKER}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                document.getElementById('stockHeader').innerHTML = `<div class="error-text">${data.error}</div>`;
+                return;
+            }
+            stockData = data;
+            renderStockHeader(data);
+            renderKeyStats(data);
+            renderCompanyInfo(data);
+            document.getElementById('stockPageTitle').textContent = `${data.symbol} — ${data.name}`;
+        });
+}
+
+function renderStockHeader(d) {
+    const changeClass = d.change >= 0 ? 'positive' : 'negative';
+    document.getElementById('stockHeader').innerHTML = `
+        <div class="stock-header-content">
+            <div class="stock-identity">
+                <h1 class="stock-symbol">${d.symbol}</h1>
+                <span class="stock-name">${d.name}</span>
+                <span class="stock-meta">${d.sector} · ${d.exchange}</span>
+            </div>
+            <div class="stock-price-block">
+                <div class="stock-current-price">$${d.price.toFixed(2)}</div>
+                <div class="stock-change ${changeClass}">
+                    <i class="fas fa-caret-${d.change >= 0 ? 'up' : 'down'}"></i>
+                    ${d.change >= 0 ? '+' : ''}${d.change.toFixed(2)} (${d.change_percent.toFixed(2)}%)
+                </div>
+            </div>
+            <div class="stock-header-actions">
+                <button class="btn btn-primary" onclick="addTickerToWatchlist('${d.symbol}')">
+                    <i class="fas fa-star"></i> Watch
+                </button>
+                <button class="btn btn-ghost" onclick="openQuickTrade(); document.getElementById('tradeTicker').value='${d.symbol}';">
+                    <i class="fas fa-exchange-alt"></i> Trade
+                </button>
+            </div>
+        </div>`;
+}
+
+function renderKeyStats(d) {
+    document.getElementById('keyStats').innerHTML = `
+        <div class="stats-grid">
+            <div class="stat-cell"><span class="stat-label">Open</span><span class="stat-val">$${d.open.toFixed(2)}</span></div>
+            <div class="stat-cell"><span class="stat-label">High</span><span class="stat-val">$${d.day_high.toFixed(2)}</span></div>
+            <div class="stat-cell"><span class="stat-label">Low</span><span class="stat-val">$${d.day_low.toFixed(2)}</span></div>
+            <div class="stat-cell"><span class="stat-label">Volume</span><span class="stat-val">${formatLargeNumber(d.volume)}</span></div>
+            <div class="stat-cell"><span class="stat-label">Avg Volume</span><span class="stat-val">${formatLargeNumber(d.avg_volume)}</span></div>
+            <div class="stat-cell"><span class="stat-label">Market Cap</span><span class="stat-val">${formatLargeNumber(d.market_cap)}</span></div>
+            <div class="stat-cell"><span class="stat-label">P/E Ratio</span><span class="stat-val">${d.pe_ratio ? d.pe_ratio.toFixed(2) : 'N/A'}</span></div>
+            <div class="stat-cell"><span class="stat-label">Fwd P/E</span><span class="stat-val">${d.forward_pe ? d.forward_pe.toFixed(2) : 'N/A'}</span></div>
+            <div class="stat-cell"><span class="stat-label">EPS</span><span class="stat-val">$${d.eps ? d.eps.toFixed(2) : 'N/A'}</span></div>
+            <div class="stat-cell"><span class="stat-label">Beta</span><span class="stat-val">${d.beta ? d.beta.toFixed(2) : 'N/A'}</span></div>
+            <div class="stat-cell"><span class="stat-label">52W High</span><span class="stat-val">$${d.fifty_two_week_high.toFixed(2)}</span></div>
+            <div class="stat-cell"><span class="stat-label">52W Low</span><span class="stat-val">$${d.fifty_two_week_low.toFixed(2)}</span></div>
+            <div class="stat-cell"><span class="stat-label">50D Avg</span><span class="stat-val">$${d.fifty_day_avg.toFixed(2)}</span></div>
+            <div class="stat-cell"><span class="stat-label">200D Avg</span><span class="stat-val">$${d.two_hundred_day_avg.toFixed(2)}</span></div>
+            <div class="stat-cell"><span class="stat-label">Div Yield</span><span class="stat-val">${d.dividend_yield ? (d.dividend_yield * 100).toFixed(2) + '%' : 'N/A'}</span></div>
+        </div>`;
+}
+
+function renderCompanyInfo(d) {
+    document.getElementById('companyInfo').innerHTML = `
+        <div class="company-details">
+            <p class="company-description">${d.description ? d.description.substring(0, 500) + (d.description.length > 500 ? '...' : '') : 'No description available.'}</p>
+            <div class="company-meta">
+                <span><strong>Sector:</strong> ${d.sector}</span>
+                <span><strong>Industry:</strong> ${d.industry}</span>
+                ${d.website ? `<span><strong>Website:</strong> <a href="${d.website}" target="_blank">${d.website}</a></span>` : ''}
+            </div>
+        </div>`;
+}
+
+function loadChart(period, interval) {
+    fetch(`/api/stock/${TICKER}/history?period=${period}&interval=${interval}`)
+        .then(r => r.json())
+        .then(data => {
+            if (!data.length) return;
+
+            const dates = data.map(d => d.date);
+            const closes = data.map(d => d.close);
+            const volumes = data.map(d => d.volume);
+
+            const priceColor = closes[closes.length - 1] >= closes[0] ? '#00c853' : '#ff1744';
+
+            const traces = [
+                {
+                    x: dates, y: closes,
+                    type: 'scatter', mode: 'lines',
+                    name: 'Price',
+                    line: {color: priceColor, width: 2},
+                    fill: 'tozeroy',
+                    fillcolor: priceColor + '15',
+                    yaxis: 'y2',
+                },
+                {
+                    x: dates, y: volumes,
+                    type: 'bar',
+                    name: 'Volume',
+                    marker: {color: '#ffffff15'},
+                    yaxis: 'y',
+                }
+            ];
+
+            const layout = {
+                paper_bgcolor: 'transparent',
+                plot_bgcolor: 'transparent',
+                font: {color: '#8fa393', family: 'Inter'},
+                margin: {l: 60, r: 20, t: 10, b: 40},
+                showlegend: false,
+                xaxis: {
+                    gridcolor: '#ffffff08',
+                    tickfont: {size: 11},
+                },
+                yaxis: {
+                    domain: [0, 0.2],
+                    gridcolor: '#ffffff08',
+                    tickfont: {size: 10},
+                    showticklabels: false,
+                },
+                yaxis2: {
+                    domain: [0.25, 1],
+                    gridcolor: '#ffffff08',
+                    tickprefix: '$',
+                    tickfont: {size: 11},
+                },
+                hovermode: 'x unified',
+            };
+
+            Plotly.newPlot('priceChart', traces, layout, {responsive: true, displayModeBar: false});
+        });
+}
+
+function loadRecommendations() {
+    fetch(`/api/stock/${TICKER}/recommendations`)
+        .then(r => r.json())
+        .then(data => {
+            const container = document.getElementById('analystRatings');
+            const actionsContainer = document.getElementById('analystActions');
+
+            if (data.summary) {
+                const s = data.summary;
+                const total = s.strong_buy + s.buy + s.hold + s.sell + s.strong_sell;
+                container.innerHTML = `
+                    <div class="rating-summary">
+                        <div class="rating-bars">
+                            <div class="rating-bar-row">
+                                <span class="rating-label">Strong Buy</span>
+                                <div class="rating-bar"><div class="rating-fill strong-buy" style="width: ${total ? (s.strong_buy/total*100) : 0}%"></div></div>
+                                <span class="rating-count">${s.strong_buy}</span>
+                            </div>
+                            <div class="rating-bar-row">
+                                <span class="rating-label">Buy</span>
+                                <div class="rating-bar"><div class="rating-fill buy" style="width: ${total ? (s.buy/total*100) : 0}%"></div></div>
+                                <span class="rating-count">${s.buy}</span>
+                            </div>
+                            <div class="rating-bar-row">
+                                <span class="rating-label">Hold</span>
+                                <div class="rating-bar"><div class="rating-fill hold" style="width: ${total ? (s.hold/total*100) : 0}%"></div></div>
+                                <span class="rating-count">${s.hold}</span>
+                            </div>
+                            <div class="rating-bar-row">
+                                <span class="rating-label">Sell</span>
+                                <div class="rating-bar"><div class="rating-fill sell" style="width: ${total ? (s.sell/total*100) : 0}%"></div></div>
+                                <span class="rating-count">${s.sell}</span>
+                            </div>
+                            <div class="rating-bar-row">
+                                <span class="rating-label">Strong Sell</span>
+                                <div class="rating-bar"><div class="rating-fill strong-sell" style="width: ${total ? (s.strong_sell/total*100) : 0}%"></div></div>
+                                <span class="rating-count">${s.strong_sell}</span>
+                            </div>
+                        </div>
+                        <div class="rating-total">${total} analysts</div>
+                    </div>`;
+            } else {
+                container.innerHTML = '<p class="empty-state">No analyst ratings available</p>';
+            }
+
+            if (data.recommendations && data.recommendations.length) {
+                actionsContainer.innerHTML = `
+                    <div class="analyst-list">
+                        ${data.recommendations.slice(0, 10).map(r => `
+                            <div class="analyst-row">
+                                <span class="analyst-firm">${r.firm}</span>
+                                <span class="analyst-grade grade-${(r.grade || '').toLowerCase().replace(/\s+/g, '-')}">${r.grade || 'N/A'}</span>
+                            </div>
+                        `).join('')}
+                    </div>`;
+            } else {
+                actionsContainer.innerHTML = '<p class="empty-state">No recent analyst actions</p>';
+            }
+        });
+}
+
+function loadAdvice() {
+    const container = document.getElementById('advisorContent');
+    container.innerHTML = '<div class="loading-placeholder"><div class="spinner"></div><p>Running technical analysis...</p></div>';
+
+    fetch(`/api/advice/${TICKER}`)
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) {
+                container.innerHTML = `<p class="error-text">${data.error}</p>`;
+                return;
+            }
+
+            const rec = data.blended_recommendation || data.recommendation;
+            const score = data.blended_score || data.score;
+
+            container.innerHTML = `
+                <div class="advisor-result">
+                    <div class="advisor-score-section">
+                        <div class="score-circle" style="--score-color: ${rec.color}">
+                            <svg viewBox="0 0 120 120">
+                                <circle cx="60" cy="60" r="54" fill="none" stroke="#ffffff10" stroke-width="8"/>
+                                <circle cx="60" cy="60" r="54" fill="none" stroke="${rec.color}" stroke-width="8"
+                                    stroke-dasharray="${score * 3.39} 339" stroke-linecap="round"
+                                    transform="rotate(-90 60 60)" style="transition: stroke-dasharray 1s ease;"/>
+                            </svg>
+                            <div class="score-value">
+                                <span class="score-number">${Math.round(score)}</span>
+                                <span class="score-label">/ 100</span>
+                            </div>
+                        </div>
+                        <div class="score-rating" style="color: ${rec.color}">${rec.rating}</div>
+                        <p class="score-description">${rec.description}</p>
+                    </div>
+                    <div class="advisor-signals">
+                        <h4>Technical Signals</h4>
+                        ${data.signals.map(s => `
+                            <div class="signal-row">
+                                <span class="signal-indicator">${s.indicator}</span>
+                                <span class="signal-badge signal-${s.signal.toLowerCase().replace(/[^a-z]/g, '')}">${s.signal}</span>
+                                <span class="signal-detail">${s.detail}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                    ${data.rec_summary ? `
+                    <div class="advisor-analyst-note">
+                        <h4>Analyst Consensus Blended</h4>
+                        <p>Technical Score: ${data.score}/100 | Analyst Score: ${data.analyst_score}/100 | Blended: ${Math.round(score)}/100</p>
+                    </div>` : ''}
+                    <div class="advisor-indicators">
+                        <h4>Key Indicators</h4>
+                        <div class="indicator-grid">
+                            <span>RSI(14): ${data.indicators.rsi}</span>
+                            <span>MACD: ${data.indicators.macd}</span>
+                            <span>SMA 20: $${data.indicators.sma_20}</span>
+                            <span>SMA 50: $${data.indicators.sma_50}</span>
+                            ${data.indicators.sma_200 ? `<span>SMA 200: $${data.indicators.sma_200}</span>` : ''}
+                            <span>BB Upper: $${data.indicators.bb_upper}</span>
+                            <span>BB Lower: $${data.indicators.bb_lower}</span>
+                            <span>Vol Ratio: ${data.indicators.volume_ratio}x</span>
+                            <span>Volatility: ${data.indicators.volatility_20d}%</span>
+                        </div>
+                    </div>
+                </div>`;
+        });
+}
+
+function setTradeAction(btn, action) {
+    currentTradeAction = action;
+    document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    updateTradeEstimate();
+}
+
+function updateTradeEstimate() {
+    const qty = parseFloat(document.getElementById('stockTradeQty').value) || 0;
+    const container = document.getElementById('stockTradeEstimate');
+    if (!stockData || !qty) {
+        container.innerHTML = '';
+        return;
+    }
+    const total = qty * stockData.price;
+    container.innerHTML = `
+        <div class="estimate-line">
+            <span>${currentTradeAction} ${qty} × $${stockData.price.toFixed(2)}</span>
+            <strong>$${formatNumber(total)}</strong>
+        </div>`;
+}
+
+function placeStockTrade() {
+    const qty = parseFloat(document.getElementById('stockTradeQty').value);
+    if (!qty || qty <= 0) {
+        showToast('Enter a valid quantity', 'error');
+        return;
+    }
+
+    fetch('/api/trade', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ticker: TICKER, action: currentTradeAction, quantity: qty})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showToast(data.message, 'success');
+            document.getElementById('stockTradeQty').value = '';
+            document.getElementById('stockTradeEstimate').innerHTML = '';
+        } else {
+            showToast(data.error, 'error');
+        }
+    });
+}
+
+function addTickerToWatchlist(ticker) {
+    fetch('/api/watchlist', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ticker})
+    })
+    .then(r => r.json())
+    .then(data => {
+        showToast(data.success ? data.message : data.error, data.success ? 'success' : 'error');
+    });
+}
+
+// ── Options Chain ───────────────────────────────────────────
+
+function loadOptionsExpirations() {
+    fetch(`/api/stock/${TICKER}/options/expirations`)
+        .then(r => r.json())
+        .then(data => {
+            const sel = document.getElementById('optExpiration');
+            if (!data.length) {
+                sel.innerHTML = '<option value="">No options available</option>';
+                document.getElementById('optionsChainBody').innerHTML = '<div class="empty-state"><p>No options available for this stock</p></div>';
+                return;
+            }
+            sel.innerHTML = data.map((d, i) => {
+                const dt = new Date(d + 'T12:00:00');
+                const label = dt.toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'});
+                const days = Math.ceil((dt - new Date()) / 86400000);
+                return `<option value="${d}">${label} (${days}d)</option>`;
+            }).join('');
+            loadOptionsChain();
+        });
+}
+
+function loadOptionsChain() {
+    const exp = document.getElementById('optExpiration').value;
+    if (!exp) return;
+
+    const container = document.getElementById('optionsChainBody');
+    container.innerHTML = '<div class="loading-placeholder"><div class="spinner"></div><p>Loading options chain...</p></div>';
+
+    fetch(`/api/stock/${TICKER}/options?expiration=${exp}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                container.innerHTML = `<div class="empty-state"><p>${data.error}</p></div>`;
+                return;
+            }
+            optionsData = data;
+            renderOptionsChain();
+        });
+}
+
+function showOptionsSide(side, btn) {
+    currentOptionsSide = side;
+    document.querySelectorAll('#optSideToggle .toggle-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderOptionsChain();
+}
+
+function renderOptionsChain() {
+    if (!optionsData) return;
+    const container = document.getElementById('optionsChainBody');
+    const price = optionsData.underlying_price;
+
+    function buildTable(rows, type) {
+        if (!rows.length) return '<div class="empty-state"><p>No data</p></div>';
+        return `
+            <div class="options-table-wrap">
+                <table class="data-table options-table">
+                    <thead>
+                        <tr>
+                            <th>Strike</th>
+                            <th>Last</th>
+                            <th>Bid</th>
+                            <th>Ask</th>
+                            <th>Chg</th>
+                            <th>Vol</th>
+                            <th>OI</th>
+                            <th>IV</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows.map(o => {
+                            const itmClass = o.itm ? 'opt-itm' : '';
+                            const chgClass = o.change >= 0 ? 'positive' : 'negative';
+                            return `
+                            <tr class="${itmClass}">
+                                <td class="opt-strike"><strong>$${o.strike.toFixed(2)}</strong></td>
+                                <td>$${o.last.toFixed(2)}</td>
+                                <td>$${o.bid.toFixed(2)}</td>
+                                <td>$${o.ask.toFixed(2)}</td>
+                                <td class="${chgClass}">${o.change >= 0 ? '+' : ''}${o.change.toFixed(2)}</td>
+                                <td>${o.volume ? o.volume.toLocaleString() : '—'}</td>
+                                <td>${o.open_interest ? o.open_interest.toLocaleString() : '—'}</td>
+                                <td>${o.iv}%</td>
+                                <td>
+                                    <button class="btn btn-sm btn-primary" onclick="openOptionsTrade('${type}', ${o.strike}, '${o.ask.toFixed(2)}', '${o.bid.toFixed(2)}')">
+                                        Trade
+                                    </button>
+                                </td>
+                            </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>`;
+    }
+
+    if (currentOptionsSide === 'both') {
+        container.innerHTML = `
+            <div class="options-dual">
+                <div class="options-side">
+                    <div class="options-side-header calls-header">CALLS</div>
+                    ${buildTable(optionsData.calls, 'CALL')}
+                </div>
+                <div class="options-side">
+                    <div class="options-side-header puts-header">PUTS</div>
+                    ${buildTable(optionsData.puts, 'PUT')}
+                </div>
+            </div>`;
+    } else {
+        const rows = currentOptionsSide === 'calls' ? optionsData.calls : optionsData.puts;
+        const type = currentOptionsSide === 'calls' ? 'CALL' : 'PUT';
+        container.innerHTML = buildTable(rows, type);
+    }
+}
+
+function openOptionsTrade(type, strike, ask, bid) {
+    const exp = document.getElementById('optExpiration').value;
+    const modal = document.getElementById('optionsTradeModal');
+    document.getElementById('otType').textContent = type;
+    document.getElementById('otStrike').textContent = '$' + strike.toFixed(2);
+    document.getElementById('otExp').textContent = exp;
+    document.getElementById('otAsk').textContent = '$' + ask;
+    document.getElementById('otBid').textContent = '$' + bid;
+    document.getElementById('otContracts').value = 1;
+    document.getElementById('otAction').value = 'BUY';
+    modal.dataset.type = type;
+    modal.dataset.strike = strike;
+    modal.dataset.exp = exp;
+    modal.dataset.ask = ask;
+    modal.dataset.bid = bid;
+    updateOptionsEstimate();
+    modal.classList.add('active');
+}
+
+function closeOptionsTrade() {
+    document.getElementById('optionsTradeModal').classList.remove('active');
+}
+
+function updateOptionsEstimate() {
+    const modal = document.getElementById('optionsTradeModal');
+    const action = document.getElementById('otAction').value;
+    const contracts = parseInt(document.getElementById('otContracts').value) || 0;
+    const premium = parseFloat(action === 'BUY' ? modal.dataset.ask : modal.dataset.bid) || 0;
+    const total = premium * contracts * 100;
+    document.getElementById('otEstimate').innerHTML = contracts > 0
+        ? `<div class="estimate-line"><span>${action} ${contracts} × $${premium.toFixed(2)} × 100</span><strong>$${formatNumber(total)}</strong></div>`
+        : '';
+}
+
+function executeOptionsTrade() {
+    const modal = document.getElementById('optionsTradeModal');
+    const action = document.getElementById('otAction').value;
+    const contracts = parseInt(document.getElementById('otContracts').value);
+    const notes = document.getElementById('otNotes').value.trim();
+
+    if (!contracts || contracts <= 0) {
+        showToast('Enter a valid number of contracts', 'error');
+        return;
+    }
+
+    const premium = parseFloat(action === 'BUY' ? modal.dataset.ask : modal.dataset.bid) || null;
+
+    fetch('/api/options/trade', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            ticker: TICKER,
+            option_type: modal.dataset.type,
+            strike: parseFloat(modal.dataset.strike),
+            expiration: modal.dataset.exp,
+            action: action,
+            contracts: contracts,
+            premium: premium,
+            notes: notes,
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showToast(data.message, 'success');
+            closeOptionsTrade();
+        } else {
+            showToast(data.error, 'error');
+        }
+    });
+}
+</script>
+{% endblock %}

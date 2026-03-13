@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Élephante{% endblock %} — Stock Analyzer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">
+                <svg class="logo-icon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                    <ellipse cx="50" cy="52" rx="28" ry="24" fill="currentColor" opacity="0.9"/>
+                    <ellipse cx="25" cy="42" rx="16" ry="20" fill="currentColor" opacity="0.7" transform="rotate(-15, 25, 42)"/>
+                    <ellipse cx="75" cy="42" rx="16" ry="20" fill="currentColor" opacity="0.7" transform="rotate(15, 75, 42)"/>
+                    <circle cx="38" cy="46" r="3" fill="#121a15"/>
+                    <circle cx="62" cy="46" r="3" fill="#121a15"/>
+                    <path d="M 45 58 Q 50 64 55 58" stroke="#121a15" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+                    <path d="M 50 58 L 50 68 Q 48 72 46 68" stroke="#121a15" stroke-width="2" fill="none" stroke-linecap="round"/>
+                    <circle cx="39" cy="47" r="1" fill="white" opacity="0.8"/>
+                    <circle cx="63" cy="47" r="1" fill="white" opacity="0.8"/>
+                </svg>
+                <div class="logo-text">
+                    <span class="brand-name">Élephante</span>
+                    <span class="brand-sub">Stock Analyzer</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="sidebar-search">
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" id="globalSearch" placeholder="Search stocks..." autocomplete="off">
+                <kbd>Ctrl+K</kbd>
+            </div>
+            <div class="search-results" id="searchResults"></div>
+        </div>
+
+        <ul class="nav-menu">
+            <li class="nav-item">
+                <a href="/" class="nav-link {% if request.path == '/' %}active{% endif %}">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Dashboard</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="/portfolio" class="nav-link {% if request.path == '/portfolio' %}active{% endif %}">
+                    <i class="fas fa-wallet"></i>
+                    <span>Portfolio</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="/advisor" class="nav-link {% if request.path == '/advisor' %}active{% endif %}">
+                    <i class="fas fa-brain"></i>
+                    <span>Advisor</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="/backtest" class="nav-link {% if request.path == '/backtest' %}active{% endif %}">
+                    <i class="fas fa-flask"></i>
+                    <span>Backtester</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="/settings" class="nav-link {% if request.path == '/settings' %}active{% endif %}">
+                    <i class="fas fa-cog"></i>
+                    <span>Settings</span>
+                </a>
+            </li>
+        </ul>
+
+        <div class="sidebar-footer">
+            <div class="market-status" id="marketStatus">
+                <span class="status-dot"></span>
+                <span class="status-text">Loading...</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <header class="top-bar">
+            <button class="sidebar-toggle" id="sidebarToggle">
+                <i class="fas fa-bars"></i>
+            </button>
+            <div class="page-title">
+                <h1>{% block page_title %}Dashboard{% endblock %}</h1>
+            </div>
+            <div class="top-bar-actions">
+                <div class="quick-trade-btn" onclick="openQuickTrade()">
+                    <i class="fas fa-exchange-alt"></i>
+                    <span>Quick Trade</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="content-area">
+            {% if error %}
+            <div class="error-banner">
+                <i class="fas fa-exclamation-triangle"></i>
+                <span>{{ error }}</span>
+            </div>
+            {% endif %}
+
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+    <!-- Quick Trade Modal -->
+    <div class="modal-overlay" id="quickTradeModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3><i class="fas fa-exchange-alt"></i> Quick Trade</h3>
+                <button class="modal-close" onclick="closeQuickTrade()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Trade Type Toggle -->
+                <div class="form-group">
+                    <label>Trade Type</label>
+                    <div class="toggle-group">
+                        <button class="toggle-btn active" onclick="setQuickTradeType('stock', this)">Stock</button>
+                        <button class="toggle-btn" onclick="setQuickTradeType('option', this)">Option</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Ticker Symbol</label>
+                    <input type="text" id="tradeTicker" placeholder="e.g. AAPL" class="form-input" style="text-transform: uppercase;">
+                </div>
+                <!-- Stock fields -->
+                <div id="stockTradeFields">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Action</label>
+                            <select id="tradeAction" class="form-input">
+                                <option value="BUY">Buy</option>
+                                <option value="SELL">Sell</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Quantity</label>
+                            <input type="number" id="tradeQuantity" placeholder="0" min="0.01" step="0.01" class="form-input">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Order Type</label>
+                        <select id="tradeOrderType" class="form-input" onchange="onOrderTypeChange()">
+                            <option value="MARKET">Market (Execute Now)</option>
+                            <option value="STOP_LOSS">Stop Loss</option>
+                            <option value="TAKE_PROFIT">Take Profit</option>
+                            <option value="TRAILING_STOP">Trailing Stop</option>
+                        </select>
+                    </div>
+                    <div id="orderTriggerFields" style="display: none;">
+                        <div class="form-row">
+                            <div class="form-group" id="triggerPriceGroup">
+                                <label>Trigger Price ($)</label>
+                                <input type="number" id="tradeTriggerPrice" placeholder="0.00" min="0.01" step="0.01" class="form-input">
+                            </div>
+                            <div class="form-group" id="trailPercentGroup" style="display: none;">
+                                <label>Trail %</label>
+                                <input type="number" id="tradeTrailPercent" placeholder="5" min="0.1" step="0.1" value="5" class="form-input">
+                            </div>
+                        </div>
+                        <div class="order-hint" id="orderHint"></div>
+                    </div>
+                </div>
+                <!-- Options fields -->
+                <div id="optionTradeFields" style="display: none;">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Type</label>
+                            <select id="qtOptType" class="form-input">
+                                <option value="CALL">Call</option>
+                                <option value="PUT">Put</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Action</label>
+                            <select id="qtOptAction" class="form-input">
+                                <option value="BUY">Buy to Open</option>
+                                <option value="SELL">Sell to Close</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Expiration</label>
+                            <select id="qtOptExp" class="form-input" onchange="loadQuickOptStrikes()">
+                                <option value="">Select ticker first</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Strike</label>
+                            <select id="qtOptStrike" class="form-input">
+                                <option value="">Select expiration first</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Contracts</label>
+                            <input type="number" id="qtOptContracts" placeholder="1" min="1" step="1" value="1" class="form-input">
+                        </div>
+                    </div>
+                </div>
+                <div class="trade-preview" id="tradePreview"></div>
+                <div class="form-group">
+                    <label>Notes (optional)</label>
+                    <input type="text" id="tradeNotes" placeholder="Trade reason..." class="form-input">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeQuickTrade()">Cancel</button>
+                <button class="btn btn-primary" id="executeTrade" onclick="executeTrade()">
+                    <i class="fas fa-check"></i> Execute Trade
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
